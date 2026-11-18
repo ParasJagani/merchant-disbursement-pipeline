@@ -1,0 +1,6 @@
+# One case-insensitive regular expression per line. Copy to .branding-denylist
+# (gitignored) and add the names of any employer, product or internal tool that
+# must not appear in this repository. In CI, put the same list in the
+# BRANDING_DENYLIST repository secret.
+your-employer-name
+internal-tool-name

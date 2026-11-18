@@ -1,0 +1,23 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.duckdb
+.env
+.env.*
+!.env.example
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+dbt/profiles.yml
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/.terraform.lock.hcl
+terraform/terraform.tfvars
+data/
+.DS_Store
+# Local-only list of words that must never appear in this repo (see scripts/check_branding.sh)
+.branding-denylist

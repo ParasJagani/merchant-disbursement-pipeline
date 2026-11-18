@@ -1,0 +1,20 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff pytest
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: python -m pytest
+      - name: Branding check
+        env:
+          BRANDING_DENYLIST: ${{ secrets.BRANDING_DENYLIST }}
+        run: ./scripts/check_branding.sh
