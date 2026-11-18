@@ -1,4 +1,4 @@
-.PHONY: lint test branding check up down
+.PHONY: lint test branding check up down golden live
 lint:
 	ruff check .
 	ruff format --check .
@@ -11,3 +11,7 @@ up:
 	docker compose up -d
 down:
 	docker compose down
+golden:
+	python -m generator backfill --out data/golden
+live:
+	python -m generator live --rate 50
