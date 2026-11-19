@@ -10,6 +10,7 @@ from pathlib import Path
 from .config import TOPICS, GeneratorConfig
 from .events import Message, posting_date
 from .oracle import write_oracle
+from .schema import validate_message
 from .simulate import SimulationResult
 
 
@@ -43,10 +44,12 @@ def write_backfill(
 
     truth = Counter(e.topic for e in result.events)
     delivered = Counter(m.topic for m in messages)
+    valid = Counter(m.topic for m in messages if validate_message(m.topic, m.value)[0])
     manifest = {
         "config": cfg.to_dict(),
         "clean_events_by_topic": {t: truth.get(t, 0) for t in TOPICS},
         "delivered_messages_by_topic": {t: delivered.get(t, 0) for t in TOPICS},
+        "valid_messages_by_topic": {t: valid.get(t, 0) for t in TOPICS},
         "delivery_effects": stats,
         "oracle_rows": len(oracle_rows),
         "oracle_sha256": _sha256(oracle_path),

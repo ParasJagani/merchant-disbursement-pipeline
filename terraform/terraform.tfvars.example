@@ -1,0 +1,4 @@
+# Copy to terraform.tfvars (gitignored). Never commit the real file.
+snowflake_organization_name = "your_org"
+snowflake_account_name      = "your_account"
+snowflake_private_key_path  = "~/.ssh/snowflake_tf_service_user.p8"

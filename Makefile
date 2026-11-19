@@ -1,4 +1,4 @@
-.PHONY: lint test branding check up down golden live
+.PHONY: lint test branding check up down golden live stage deploy verify demo-up demo-down
 lint:
 	ruff check .
 	ruff format --check .
@@ -15,3 +15,13 @@ golden:
 	python -m generator backfill --out data/golden
 live:
 	python -m generator live --rate 50
+stage:
+	python -m file_writer backfill --stager snowflake
+deploy:
+	python -m ops.deploy
+verify:
+	python -m ops.verify_bronze
+demo-up:
+	python -m ops.task_control up
+demo-down:
+	python -m ops.task_control down

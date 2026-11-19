@@ -2,7 +2,7 @@
 
 A Kafka to Snowflake pipeline that turns payment events into a daily disbursement report per merchant, account and currency.
 
-Status: Phases 0 and 1 complete (scaffold, and the seeded generator with its oracle). See `docs/roadmap.md` for the plan and `DECISIONS.md` for the choices made.
+Status: Phases 0 to 2 built (scaffold, generator and oracle, file writer and bronze load). Phase 2 has not yet been run against a real Snowflake account; follow `docs/SETUP_SNOWFLAKE.md`. See `docs/roadmap.md` for the plan and `DECISIONS.md` for the choices made.
 
 ## Layout
 
@@ -10,7 +10,9 @@ Status: Phases 0 and 1 complete (scaffold, and the seeded generator with its ora
 | --- | --- |
 | `generator/` | Seeded event generator for seven topics, plus the oracle file |
 | `file_writer/` | Consumes Kafka and writes staged files |
-| `terraform/` | Snowflake infrastructure, bronze and the stream track |
+| `terraform/` | Account-level Snowflake objects: database, schemas, warehouses, monitors, roles |
+| `sql/` | Versioned SQL for data objects: stage, bronze tables, load task (applied by `ops/deploy.py`) |
+| `ops/` | Deploy, verify and demo-mode helpers |
 | `dbt/` | Dynamic tables, gold models and tests |
 | `dashboard/` | Streamlit app |
 | `statements/` | PDF statement builder |
