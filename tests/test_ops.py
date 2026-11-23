@@ -171,3 +171,29 @@ def test_stage_file_format_is_fully_qualified():
     text = (SQL_DIR / "10_bronze.sql").read_text()
     assert "FORMAT_NAME = '{db}.BRONZE.NDJSON_GZ'" in text
     assert "FILE_FORMAT = ndjson_gz" not in text
+
+
+def test_verify_connects_as_the_loader_with_the_loader_key(monkeypatch, tmp_path):
+    """The loader user must sign in with the loader's own key, not the admin key."""
+    import ops.connection
+    from ops import verify_bronze
+
+    seen = {}
+
+    class Stop(Exception):
+        pass
+
+    def fake_connect(**kwargs):
+        seen.update(kwargs)
+        raise Stop
+
+    monkeypatch.setattr(ops.connection, "connect", fake_connect)
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text("{}")
+    try:
+        verify_bronze.main(["--manifest", str(manifest)])
+    except Stop:
+        pass
+    assert seen["key_env"] == "SNOWFLAKE_LOADER_PRIVATE_KEY_PATH"
+    assert seen["user_env"] == "SNOWFLAKE_LOADER_USER"
+    assert seen["default_user"] == "LOADER_SERVICE_USER"

@@ -44,7 +44,11 @@ def main(argv=None) -> int:
     from .connection import connect
 
     conn = connect(
-        role_env="SNOWFLAKE_LOADER_ROLE", default_role="LOADER", user_env="SNOWFLAKE_LOADER_USER"
+        role_env="SNOWFLAKE_LOADER_ROLE",
+        default_role="LOADER",
+        user_env="SNOWFLAKE_LOADER_USER",
+        default_user="LOADER_SERVICE_USER",
+        key_env="SNOWFLAKE_LOADER_PRIVATE_KEY_PATH",
     )
     try:
         results = check(conn, json.loads(args.manifest.read_text()), args.database)
