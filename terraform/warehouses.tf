@@ -5,8 +5,8 @@ resource "snowflake_resource_monitor" "ingest" {
   frequency    = "MONTHLY"
 
   notify_triggers            = [50, 75]
-  suspend_triggers           = [100]
-  suspend_immediate_triggers = [110]
+  suspend_trigger           = 100
+  suspend_immediate_trigger = 110
 }
 
 resource "snowflake_resource_monitor" "transform" {
@@ -15,8 +15,8 @@ resource "snowflake_resource_monitor" "transform" {
   frequency    = "MONTHLY"
 
   notify_triggers            = [50, 75]
-  suspend_triggers           = [100]
-  suspend_immediate_triggers = [110]
+  suspend_trigger           = 100
+  suspend_immediate_trigger = 110
 }
 
 resource "snowflake_warehouse" "ingest" {
