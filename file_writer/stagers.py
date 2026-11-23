@@ -74,4 +74,6 @@ def connect_from_env():
         private_key=der,
         role=os.environ.get("SNOWFLAKE_LOADER_ROLE", "LOADER"),
         warehouse=os.environ.get("SNOWFLAKE_INGEST_WAREHOUSE", "INGEST_WH"),
+        database=os.environ.get("SNOWFLAKE_DATABASE", "MERCHANT_DISBURSEMENT"),
+        schema="BRONZE",
     )

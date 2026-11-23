@@ -268,3 +268,15 @@ def test_snowflake_stager_puts_without_overwrite_and_reports_skips():
     )
     assert "AUTO_COMPRESS=FALSE" in sql and "OVERWRITE=FALSE" in sql
     assert SnowflakeStager(FakeConnection("SKIPPED")).stage(file) is False
+
+
+def test_snowflake_stage_is_database_qualified(monkeypatch):
+    """A PUT needs a database; the stager must not rely on the session having one."""
+    from argparse import Namespace
+
+    from file_writer import __main__ as cli
+
+    monkeypatch.setenv("SNOWFLAKE_DATABASE", "SOME_DB")
+    monkeypatch.setattr(cli, "connect_from_env", lambda: FakeConnection("UPLOADED"))
+    stager = cli._stager(Namespace(stager="snowflake"))
+    assert stager.stage_name == "@SOME_DB.BRONZE.LANDING"

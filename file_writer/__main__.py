@@ -13,7 +13,8 @@ from .writer import FileWriter, Record, stage_backfill
 def _stager(args):
     if args.stager == "local":
         return LocalStager(args.out)
-    return SnowflakeStager(connect_from_env())
+    database = os.environ.get("SNOWFLAKE_DATABASE", "MERCHANT_DISBURSEMENT")
+    return SnowflakeStager(connect_from_env(), stage=f"@{database}.BRONZE.LANDING")
 
 
 def run_kafka(args) -> int:
@@ -79,7 +80,13 @@ def run_kafka(args) -> int:
 
 
 def run_backfill(args) -> int:
-    stats = stage_backfill(args.src, _stager(args), LocalDeadLetters(args.dlq))
+    stager = _stager(args)
+    try:
+        stats = stage_backfill(args.src, stager, LocalDeadLetters(args.dlq))
+    finally:
+        connection = getattr(stager, "connection", None)
+        if connection is not None:
+            connection.close()
     print(stats)
     return 0
 
