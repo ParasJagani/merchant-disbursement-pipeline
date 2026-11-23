@@ -74,7 +74,7 @@ def test_every_statement_is_safe_to_repeat():
         for s in render(path, "DB"):
             head = s.lstrip().upper()
             assert (
-                head.startswith(("USE ", "GRANT "))
+                head.startswith(("USE ", "GRANT ", "ALTER STAGE "))  # ALTER ... SET is repeatable
                 or " IF NOT EXISTS " in head[:80]
                 or head.startswith("CREATE OR REPLACE ")
             ), s[:60]
@@ -164,3 +164,10 @@ def test_no_real_credentials_are_committed():
             text = path.read_text(errors="ignore")
             assert "-----BEGIN" + " PRIVATE KEY" not in text, path
             assert "-----BEGIN" + " RSA PRIVATE KEY" not in text, path
+
+
+def test_stage_file_format_is_fully_qualified():
+    """A load runs with no current schema, so the file format needs a full name."""
+    text = (SQL_DIR / "10_bronze.sql").read_text()
+    assert "FORMAT_NAME = '{db}.BRONZE.NDJSON_GZ'" in text
+    assert "FILE_FORMAT = ndjson_gz" not in text

@@ -10,8 +10,12 @@ CREATE FILE FORMAT IF NOT EXISTS ndjson_gz
 
 -- Internal stage. The file writer PUTs files here; the load task reads them.
 CREATE STAGE IF NOT EXISTS landing
-  FILE_FORMAT = ndjson_gz
+  FILE_FORMAT = (FORMAT_NAME = '{db}.BRONZE.NDJSON_GZ')
   COMMENT = 'Landing zone for gzip NDJSON files, one folder per topic';
+
+-- Fully qualified, so a load works from any session (a worksheet or a task has no current schema).
+-- The ALTER also repairs a stage created earlier with an unqualified name.
+ALTER STAGE landing SET FILE_FORMAT = (FORMAT_NAME = '{db}.BRONZE.NDJSON_GZ');
 
 -- One append-only table per topic. The whole message is kept as VARIANT, plus where it came from.
 -- CHANGE_TRACKING lets streams (reference data) and dynamic tables (events) read these tables.
