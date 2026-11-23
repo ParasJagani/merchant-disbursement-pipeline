@@ -3,7 +3,7 @@ resource "snowflake_resource_monitor" "ingest" {
   name         = "${var.ingest_warehouse_name}_MONITOR"
   credit_quota = var.ingest_monthly_credit_quota
   frequency    = "MONTHLY"
-
+  start_timestamp = "IMMEDIATELY"
   notify_triggers            = [50, 75]
   suspend_trigger           = 100
   suspend_immediate_trigger = 110
@@ -13,7 +13,7 @@ resource "snowflake_resource_monitor" "transform" {
   name         = "${var.transform_warehouse_name}_MONITOR"
   credit_quota = var.transform_monthly_credit_quota
   frequency    = "MONTHLY"
-
+  start_timestamp = "IMMEDIATELY"
   notify_triggers            = [50, 75]
   suspend_trigger           = 100
   suspend_immediate_trigger = 110
