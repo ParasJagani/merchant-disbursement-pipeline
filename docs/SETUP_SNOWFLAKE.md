@@ -12,7 +12,7 @@ start until you have an uninterrupted block of time and everything below is inst
 ## 1. Create the trial account
 
 Sign up at the Snowflake trial page. Choose **AWS** and a region near you. Standard edition is
-enough for this project; check the credit price of your edition before choosing.
+enough for this project (the trial may give you Enterprise, which also works, at a higher credit price); check the credit price of your edition before choosing.
 
 In Snowsight, open the account menu and view the account details. Note two values: the
 **organization name** and the **account name** (the account identifier is `ORG-ACCOUNT`).

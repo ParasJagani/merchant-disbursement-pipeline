@@ -16,7 +16,7 @@ Each decision has the default from the design plan. Change a line here, and note
 
 - Money is stored as integer minor units, never floats.
 - Silver has two tracks: streams, tasks and `MERGE` for reference data; dynamic tables for events.
-- dbt owns the dynamic tables, gold and the tests. Terraform owns infrastructure, bronze and the stream track.
+- dbt owns the dynamic tables, gold and the tests. Terraform owns account-level objects only. Bronze, the load task and the stream track are versioned SQL in `sql/`.
 - Gold is built on posting date from a ledger, and checked against the generator's oracle file.
 - Bad data is quarantined with a reason; nothing is dropped silently.
 
@@ -26,3 +26,19 @@ Each decision has the default from the design plan. Change a line here, and note
 - Trial simplification: the Terraform service user holds ACCOUNTADMIN. Narrowing it is a Phase 8 task.
 - Bronze rows are everything that passed validation, including duplicate deliveries. Duplicates are removed in silver by `event_id`.
 - Invalid messages never reach bronze. They go to a dead-letter topic (Kafka) or a dead-letter file (backfill) with a reason.
+
+## Phase 2 first run (trial account, AWS, Enterprise edition)
+
+Gate passed: all seven topics loaded with counts equal to the generator's manifest (187,684 valid
+messages in 148 files), re-staging reported 0 new files, and a second `LOAD_BRONZE()` call changed
+no counts. Six defects only a real account could show, all fixed:
+
+1. Terraform provider 2.x takes single values `suspend_trigger` and `suspend_immediate_trigger`, not lists.
+2. A resource monitor with a `frequency` also needs `start_timestamp` (`IMMEDIATELY`).
+3. The example key path in `terraform.tfvars.example` did not match the file `make_keys.sh` writes.
+4. A `PUT` needs a current database: the loader connection now sets database and schema, and the stage name is fully qualified.
+5. The stage's file format was stored unqualified, so a worksheet or task with no current schema could not find it. It is now `{db}.BRONZE.NDJSON_GZ`, and `ALTER STAGE` repairs older stages.
+6. `verify_bronze` signed in as the loader user with the admin key. It now uses the loader's own key.
+
+Lesson: the tests used fakes for the connection, so they could not see these. Phase 8 adds one
+integration run against a real account (or an emulator) so this class of error shows up in CI.
