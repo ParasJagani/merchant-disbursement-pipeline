@@ -11,6 +11,11 @@ target-version = "py310"
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
 
+[tool.ruff.lint.per-file-ignores]
+# These files hold SQL text; wrapping it would make the generated SQL harder to read.
+"silver/render.py" = ["E501"]
+"silver/check.py" = ["E501"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"

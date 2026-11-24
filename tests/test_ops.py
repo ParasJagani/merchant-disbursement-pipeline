@@ -117,10 +117,15 @@ def test_verify_bronze_compares_counts_with_the_manifest():
     assert [r["topic"] for r in results if not r["ok"]] == ["billing.fees"]
 
 
-def test_task_control_resumes_and_suspends():
+def test_task_control_resumes_and_suspends_tasks_and_dynamic_tables():
     conn = Conn()
-    assert set_state(conn, "DB", True) == ["ALTER TASK DB.OPS.LOAD_BRONZE_TASK RESUME"]
-    assert set_state(conn, "DB", False) == ["ALTER TASK DB.OPS.LOAD_BRONZE_TASK SUSPEND"]
+    up = set_state(conn, "DB", True)
+    assert up[0] == "ALTER TASK DB.OPS.LOAD_BRONZE_TASK RESUME"
+    assert "ALTER TASK DB.OPS.MERGE_MERCHANTS_TASK RESUME" in up
+    assert "ALTER DYNAMIC TABLE DB.SILVER.silver_transactions RESUME" in up
+    down = set_state(conn, "DB", False)
+    assert [s.replace("SUSPEND", "RESUME") for s in down] == up
+    assert conn.c.executed == up + down
 
 
 # --- Terraform (no binary here, so static checks) ----------------------------------------------
@@ -197,3 +202,94 @@ def test_verify_connects_as_the_loader_with_the_loader_key(monkeypatch, tmp_path
     assert seen["key_env"] == "SNOWFLAKE_LOADER_PRIVATE_KEY_PATH"
     assert seen["user_env"] == "SNOWFLAKE_LOADER_USER"
     assert seen["default_user"] == "LOADER_SERVICE_USER"
+
+
+# --- silver operations --------------------------------------------------------------------
+
+
+def test_reset_silver_never_touches_bronze_tables():
+    from ops.reset_silver import statements
+
+    todo = statements("DB")
+    assert all(" IF EXISTS " in s for s in todo)
+    dropped = [s for s in todo if s.startswith("DROP TABLE")]
+    assert dropped and not any(".BRONZE." in s for s in dropped)
+    assert any(s.startswith("DROP STREAM") and ".BRONZE.ref_merchants_stream" in s for s in todo)
+
+
+def test_reset_silver_prints_by_default(capsys):
+    from ops.reset_silver import main
+
+    assert main([]) == 0
+    assert "Dry run" in capsys.readouterr().out
+
+
+class _SilverCursor:
+    """Answers verify_silver's queries from a dict, keyed by a fragment of the SQL."""
+
+    def __init__(self, counts, mode, ledger):
+        self.counts, self.mode, self.ledger = counts, mode, ledger
+
+    def execute(self, sql):
+        self.sql = sql
+        self.description = None
+
+    @property
+    def description(self):
+        return self._description
+
+    @description.setter
+    def description(self, _):
+        sql = self.sql
+        if sql.startswith("SELECT COUNT(*)"):
+            self._description, self._rows = (
+                [("n",)],
+                [(self.counts[sql.split(" FROM ")[1].split(".", 1)[1]],)],
+            )
+        elif sql.startswith("SHOW DYNAMIC"):
+            from silver.spec import DYNAMIC_TABLES
+
+            self._description = [("name",), ("refresh_mode",)]
+            self._rows = [(t.split(".")[-1].upper(), self.mode) for t in DYNAMIC_TABLES]
+        elif sql.startswith("SHOW TASKS"):
+            from silver.spec import MERGE_TASKS
+
+            self._description = [("name",), ("state",)]
+            self._rows = [(t.split(".")[-1], "suspended") for t in MERGE_TASKS]
+        else:
+            self._description, self._rows = None, self.ledger
+
+    def fetchall(self):
+        return self._rows
+
+    def close(self):
+        pass
+
+
+def _silver_conn(counts, mode="INCREMENTAL", ledger=()):
+    class C:
+        def cursor(self):
+            return _SilverCursor(counts, mode, list(ledger))
+
+    return C()
+
+
+def test_verify_silver_passes_when_everything_agrees_and_flags_full_refresh():
+    from ops.verify_silver import check
+    from silver.spec import SILVER_TABLES
+
+    counts = {t: 3 for t in SILVER_TABLES}
+    ledger = [("m", "a", "EUR", "2026-01-01", "SALE", 100, "t1")]
+    oracle = [
+        dict(merchant_id="m", account_id="a", currency="EUR", posting_date="2026-01-01",
+             sales_amount=100, refund_amount=0, dispute_amount=0, platform_fee_amount=0,
+             pass_through_fee_amount=0, adjustment_amount=0, disbursed_total=100)
+    ]  # fmt: skip
+    good = check(_silver_conn(counts, ledger=ledger), "DB", counts, oracle)
+    assert all(r["ok"] for r in good)
+    full = check(_silver_conn(counts, mode="FULL", ledger=ledger), "DB", counts, oracle)
+    assert [r["name"] for r in full if not r["ok"]] and all(
+        "refresh mode" in r["name"] for r in full if not r["ok"]
+    )
+    off = check(_silver_conn(counts, ledger=[]), "DB", counts, oracle)
+    assert [r["name"] for r in off if not r["ok"]] == ["ledger from silver equals the oracle"]

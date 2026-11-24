@@ -1,4 +1,4 @@
-.PHONY: lint test branding check up down golden live stage deploy verify demo-up demo-down
+.PHONY: lint test branding check up down golden live stage deploy verify demo-up demo-down silver-render silver-verify silver-reset
 lint:
 	ruff check .
 	ruff format --check .
@@ -25,3 +25,9 @@ demo-up:
 	python -m ops.task_control up
 demo-down:
 	python -m ops.task_control down
+silver-render:
+	python -m silver.render
+silver-verify:
+	python -m ops.verify_silver
+silver-reset:
+	python -m ops.reset_silver

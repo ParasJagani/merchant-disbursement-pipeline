@@ -7,7 +7,7 @@ Nine phases, about 90 hours (an estimate). Each phase ends at a gate that is a d
 | P0 Scrub and decisions | 4 | Fresh repo, branding check, decisions file, layout | Repo clean, decisions recorded |
 | P1 Generator and topics (done) | 12 | Seven topics, event envelope, oracle file, golden dataset, Redpanda | Same seed gives same data; oracle written |
 | P2 Load into bronze (done) | 10 | File writer, Terraform base, stage, bronze tables, `COPY INTO` task | A replayed file loads exactly once |
-| P3 Silver, both tracks | 14 | Streams, tasks and `MERGE` for reference data; dynamic tables for events; comparison lab | Both tracks live; dynamic tables incremental |
+| P3 Silver, both tracks (built; Snowflake run pending) | 14 | Streams, tasks and `MERGE` for reference data; dynamic tables for events; comparison lab | Both tracks live; dynamic tables incremental |
 | P4 Gold | 10 | Ledger, daily disbursement, monthly view | Gold matches the oracle to the cent |
 | P5 Quality and errors | 10 | Quarantine, test matrix, replay, chaos drill | Zero rows lost silently |
 | P6 Monitoring | 10 | Alerts, health signals, demo mode | An alert fires on an injected failure |
