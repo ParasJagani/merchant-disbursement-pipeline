@@ -5,12 +5,16 @@ from __future__ import annotations
 import argparse
 import os
 
-TASKS = ["OPS.LOAD_BRONZE_TASK"]  # later phases add the stream and refresh tasks
+from silver.spec import DYNAMIC_TABLES, MERGE_TASKS
+
+TASKS = ["OPS.LOAD_BRONZE_TASK", *MERGE_TASKS]
 
 
 def set_state(connection, database: str, up: bool) -> list[str]:
     verb = "RESUME" if up else "SUSPEND"
     statements = [f"ALTER TASK {database}.{task} {verb}" for task in TASKS]
+    # Dynamic tables refresh on their own schedule and cost credits until suspended.
+    statements += [f"ALTER DYNAMIC TABLE {database}.{table} {verb}" for table in DYNAMIC_TABLES]
     cursor = connection.cursor()
     try:
         for statement in statements:

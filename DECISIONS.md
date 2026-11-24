@@ -16,7 +16,7 @@ Each decision has the default from the design plan. Change a line here, and note
 
 - Money is stored as integer minor units, never floats.
 - Silver has two tracks: streams, tasks and `MERGE` for reference data; dynamic tables for events.
-- dbt owns the dynamic tables, gold and the tests. Terraform owns account-level objects only. Bronze, the load task and the stream track are versioned SQL in `sql/`.
+- Terraform owns account-level objects only. Bronze, the load task, silver and its tasks are versioned SQL in `sql/`. dbt, from Phase 4, owns gold and its tests.
 - Gold is built on posting date from a ledger, and checked against the generator's oracle file.
 - Bad data is quarantined with a reason; nothing is dropped silently.
 
@@ -42,3 +42,17 @@ no counts. Six defects only a real account could show, all fixed:
 
 Lesson: the tests used fakes for the connection, so they could not see these. Phase 8 adds one
 integration run against a real account (or an emulator) so this class of error shows up in CI.
+
+## Phase 3 notes (silver)
+
+- **Generated SQL.** Seven tables share the same parsing and validation rules, so `silver/spec.py` describes each table once and `python -m silver.render` writes `sql/30_silver_reference.sql` and `sql/40_silver_events.sql`. A test fails if the files on disk are not what the generator would write. Read the SQL; do not edit it.
+- **Silver in versioned SQL, not dbt.** This replaces the earlier plan that dbt would own the dynamic tables. Reason: the same SQL can be run on DuckDB in tests and on Snowflake in the deploy, which dbt models with Snowflake-only dynamic-table config cannot. dbt returns in Phase 4 for gold and its tests.
+- **Reference track** (merchants, accounts): an append-only stream on each bronze table, a task that runs only when the stream has data, and one procedure with one transaction: insert rejects, insert new versions, merge the current row. The stream offset moves only on commit, so a failed run is retried with the same rows. History is a view that derives `valid_to` from the next version, so a late event cannot leave a stale end date.
+- **Event track** (five topics): three dynamic tables per topic. `typed_` parses and flags every bronze row; `silver_` keeps the newest valid event per entity (highest `sequence`, not latest arrival); `rejected_` keeps what failed with a reason and the original message. Late and out-of-order events fix themselves because ordering is by sequence.
+- **Duplicates** are removed by `event_id` among valid rows only. A malformed copy of a real `event_id` (the generator makes these) must not push the genuine event out as its "duplicate".
+- **Integers are strict.** A JSON string `"12.50"` is rejected as `bad_type_payload_amount`. `TRY_TO_NUMBER` on the text would have accepted it and rounded it to 13.
+- **Fees can be zero.** A fee that rounds to 0 is valid; a negative fee is rejected. Sales, refunds and disputes must be positive; adjustments are signed and non-zero.
+- **Dynamic tables do not wait for tests.** Unlike a dbt run, nothing blocks a refresh when data is bad, so the gate is by construction: bad rows are rejected into quarantine and never reach `silver_*`. Phase 5 adds alerts on the quarantine counts.
+- **A new stream starts empty**, so the streams are created with `SHOW_INITIAL_ROWS = TRUE`; otherwise rows already in bronze would never be merged.
+- **Cost.** Leaf dynamic tables use a 5 minute target lag, so they refresh (and use credits) while resumed. `make demo-down` suspends them. A fresh deploy leaves tasks suspended; dynamic tables start refreshing on creation, so run `make demo-down` after deploying if you will not be using them.
+- **How it is tested.** `silver/local.py` runs the generated SQL on DuckDB (dynamic tables as views, streams as a refilled table). A ledger built only from the silver tables equals the oracle to the cent on the full golden dataset (2,199 account-days, 0 differing rows), and on a small run with malformed messages injected straight into bronze. DuckDB cannot show that Snowflake accepts each statement or that refreshes are incremental; `make silver-verify` checks that on the real account.
