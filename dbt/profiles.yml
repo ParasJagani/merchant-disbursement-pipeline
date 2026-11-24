@@ -1,0 +1,20 @@
+# Two targets. `duckdb` is the default so nothing touches Snowflake by accident;
+# the Makefile passes --target snowflake explicitly. No secrets here: all values come from the
+# environment (see .env.example).
+merchant_gold:
+  target: duckdb
+  outputs:
+    duckdb:
+      type: duckdb
+      path: "{{ env_var('DBT_DUCKDB_PATH', 'dbt/target/local.duckdb') }}"
+      threads: 1
+    snowflake:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ORGANIZATION') }}-{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_ADMIN_USER', 'TF_SERVICE_USER') }}"
+      private_key_path: "{{ env_var('SNOWFLAKE_ADMIN_PRIVATE_KEY_PATH') }}"
+      role: "{{ env_var('SNOWFLAKE_ADMIN_ROLE', 'ACCOUNTADMIN') }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE', 'MERCHANT_DISBURSEMENT') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_TRANSFORM_WAREHOUSE', 'TRANSFORM_WH') }}"
+      schema: GOLD
+      threads: 4

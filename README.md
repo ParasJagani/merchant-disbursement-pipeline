@@ -2,7 +2,7 @@
 
 A Kafka to Snowflake pipeline that turns payment events into a daily disbursement report per merchant, account and currency.
 
-Status: Phases 0 to 3 built and verified (scaffold, generator and oracle, file writer and bronze load, silver). Phase 2 has run against a real Snowflake account and passed its gate (`docs/SETUP_SNOWFLAKE.md`); Phase 3 has also run on Snowflake and passed its gate (`docs/PHASE3_SILVER.md`). See `docs/roadmap.md` for the plan and `DECISIONS.md` for the choices made.
+Status: Phases 0 to 4 built (0 to 3 verified on Snowflake) (scaffold, generator and oracle, file writer and bronze load, silver). Phase 2 has run against a real Snowflake account and passed its gate (`docs/SETUP_SNOWFLAKE.md`); Phase 3 has also run on Snowflake and passed its gate (`docs/PHASE3_SILVER.md`). See `docs/roadmap.md` for the plan and `DECISIONS.md` for the choices made.
 
 ## Layout
 
@@ -14,7 +14,7 @@ Status: Phases 0 to 3 built and verified (scaffold, generator and oracle, file w
 | `sql/` | Versioned SQL for data objects: stage, bronze tables, load task, silver (applied by `ops/deploy.py`) |
 | `silver/` | Silver table specs, the SQL generator (`python -m silver.render`) and the DuckDB test harness |
 | `ops/` | Deploy, verify and demo-mode helpers |
-| `dbt/` | Dynamic tables, gold models and tests |
+| `dbt/` | Gold models (ledger, daily and monthly disbursement) and the tests that compare them with the oracle |
 | `dashboard/` | Streamlit app |
 | `statements/` | PDF statement builder |
 | `tests/` | Python tests |

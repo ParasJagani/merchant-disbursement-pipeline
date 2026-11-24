@@ -66,3 +66,12 @@ same SQL produced on DuckDB over the golden files; the ledger built from silver 
 
 Lesson: running the generated SQL on DuckDB first, against the answer key, meant the real account
 only had to confirm syntax and refresh mode. No Phase 2 style round of fixes was needed.
+
+## Phase 4 notes (gold)
+
+- **dbt for gold**, as originally planned. Models are plain, portable SQL (casts, `sum(case ...)`, `except`), so the same project runs on Snowflake and on DuckDB. Profiles default to the DuckDB target; the Makefile passes `--target snowflake` explicitly, so a stray `dbt build` cannot touch the account.
+- **Ledger first.** Every gold number is a sum of `gold_ledger` rows, each traceable to a silver row and from there to a bronze file and row. Deductions are positive columns in the daily report and negative amounts in the ledger.
+- **Posting date** is the UTC date of the event that moved money: capture for sales, refund time, dispute open (debit) and resolution (reversal), fee assessment, adjustment posting.
+- **The oracle is a dbt seed**, so the comparison is a plain dbt test (`gold_matches_oracle`, both directions). A pytest runs the real dbt project on a small world and then breaks the answer key by one cent to prove the test fails.
+- **Materialisation is `table`**, rebuilt by `dbt build`. Gold is small (about 2,200 daily rows for 30 days), so a full rebuild is cheap. Dynamic-table gold is a possible later step if freshness matters.
+- **Admin user for dbt** is the same trial simplification as earlier phases; Phase 8 narrows it to the TRANSFORMER role.

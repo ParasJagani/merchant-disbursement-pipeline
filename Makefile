@@ -1,4 +1,4 @@
-.PHONY: lint test branding check up down golden live stage deploy verify demo-up demo-down silver-render silver-verify silver-reset
+.PHONY: lint test branding check up down golden live stage deploy verify demo-up demo-down silver-render silver-verify silver-reset dbt-oracle dbt-local gold gold-verify
 lint:
 	ruff check .
 	ruff format --check .
@@ -31,3 +31,12 @@ silver-verify:
 	python -m ops.verify_silver
 silver-reset:
 	python -m ops.reset_silver
+dbt-oracle:
+	cp data/golden/oracle/daily_disbursement.csv dbt/seeds/oracle_daily_disbursement.csv
+dbt-local:
+	python -m silver.local
+	DBT_DUCKDB_PATH=dbt/target/local.duckdb dbt build --project-dir dbt --profiles-dir dbt --target duckdb
+gold:
+	dbt build --project-dir dbt --profiles-dir dbt --target snowflake
+gold-verify:
+	python -m ops.verify_gold
