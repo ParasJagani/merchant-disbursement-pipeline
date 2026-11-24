@@ -1,0 +1,55 @@
+version: 2
+
+models:
+  - name: gold_ledger
+    description: One signed money movement per row, built from the silver tables only.
+    columns:
+      - name: entry_id
+        description: Entry type and source id; unique because each source event produces at most one entry of a type.
+        data_tests: [unique, not_null]
+      - name: merchant_id
+        data_tests: [not_null]
+      - name: account_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: source('silver', 'silver_accounts')
+                field: account_id
+      - name: currency
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [USD, EUR, GBP, CAD, AUD]
+      - name: posting_date
+        data_tests: [not_null]
+      - name: entry_type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values:
+                  - SALE
+                  - REFUND
+                  - DISPUTE_DEBIT
+                  - DISPUTE_REVERSAL
+                  - PLATFORM_FEE
+                  - PASS_THROUGH_FEE
+                  - ADJUSTMENT
+      - name: amount_signed
+        data_tests: [not_null]
+
+  - name: gold_daily_disbursement
+    description: Daily amount owed per merchant, account, currency and posting date.
+    columns:
+      - name: account_id
+        data_tests: [not_null]
+      - name: posting_date
+        data_tests: [not_null]
+      - name: disbursed_total
+        data_tests: [not_null]
+
+  - name: gold_monthly_disbursement
+    description: The daily report rolled up by month.
+    columns:
+      - name: posting_month
+        data_tests: [not_null]

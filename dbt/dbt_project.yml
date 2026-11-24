@@ -1,0 +1,35 @@
+name: merchant_gold
+version: "1.0.0"
+config-version: 2
+profile: merchant_gold
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  merchant_gold:
+    gold:
+      +schema: gold
+      +materialized: table
+
+seeds:
+  merchant_gold:
+    # The generator's answer key, loaded only so a test can compare gold with it.
+    +schema: gold
+    oracle_daily_disbursement:
+      +column_types:
+        merchant_id: varchar
+        account_id: varchar
+        currency: varchar
+        posting_date: date
+        sales_amount: bigint
+        refund_amount: bigint
+        dispute_amount: bigint
+        platform_fee_amount: bigint
+        pass_through_fee_amount: bigint
+        adjustment_amount: bigint
+        disbursed_total: bigint

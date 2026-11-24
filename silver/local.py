@@ -80,8 +80,8 @@ def translate(statement: str) -> str:
 class LocalSilver:
     """An in-memory stand-in for the BRONZE/SILVER/QUARANTINE schemas."""
 
-    def __init__(self) -> None:
-        self.con = duckdb.connect(":memory:")
+    def __init__(self, path: str = ":memory:") -> None:
+        self.con = duckdb.connect(path)
         for schema in SCHEMAS:
             self.con.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
         for macro in MACROS:
@@ -189,6 +189,32 @@ class LocalSilver:
         self.consumed[stream] = total  # the offset moves only after the commit
         return "ok"
 
+    def close(self) -> None:
+        self.con.close()
+
     # -- queries --------------------------------------------------------------------------------
     def query(self, sql: str, params: list | None = None) -> list[tuple]:
         return self.con.execute(sql, params or []).fetchall()
+
+
+def main(argv=None) -> int:
+    """Write a DuckDB file holding bronze and silver for a golden dataset (dbt reads it locally)."""
+    import argparse
+
+    parser = argparse.ArgumentParser(prog="python -m silver.local")
+    parser.add_argument("--golden", type=Path, default=Path("data/golden"))
+    parser.add_argument("--out", type=Path, default=Path("dbt/target/local.duckdb"))
+    args = parser.parse_args(argv)
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.unlink(missing_ok=True)
+    local = LocalSilver(str(args.out))
+    local.deploy()
+    rows = local.load_golden(args.golden)
+    local.run_reference()
+    local.close()
+    print(f"loaded {rows} messages and built silver in {args.out}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

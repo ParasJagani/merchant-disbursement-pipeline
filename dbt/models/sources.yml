@@ -1,0 +1,13 @@
+version: 2
+
+sources:
+  - name: silver
+    schema: SILVER
+    description: Current-state tables built from bronze (Phase 3).
+    tables:
+      - name: silver_transactions
+      - name: silver_refunds
+      - name: silver_disputes
+      - name: silver_fees
+      - name: silver_adjustments
+      - name: silver_accounts

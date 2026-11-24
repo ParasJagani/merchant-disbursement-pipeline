@@ -293,3 +293,37 @@ def test_verify_silver_passes_when_everything_agrees_and_flags_full_refresh():
     )
     off = check(_silver_conn(counts, ledger=[]), "DB", counts, oracle)
     assert [r["name"] for r in off if not r["ok"]] == ["ledger from silver equals the oracle"]
+
+
+def test_verify_gold_flags_a_single_wrong_amount():
+    from generator.oracle import COLUMNS
+    from ops.verify_gold import check
+
+    row = ("m", "a", "EUR", "2026-01-01", 100, 0, 0, 5, 0, 0, 95)
+    oracle = [dict(zip(COLUMNS, row, strict=True))]
+
+    class C:
+        def __init__(self, daily, total, monthly, ledger):
+            self.answers = [daily, [(total,)], [(monthly,)], [(ledger,)]]
+
+        def cursor(self):
+            outer = self
+
+            class Cur:
+                def execute(self, sql):
+                    pass
+
+                def fetchall(self):
+                    return outer.answers.pop(0)
+
+                def close(self):
+                    pass
+
+            return Cur()
+
+    assert all(r["ok"] for r in check(C([row], 95, 95, 95), "DB", oracle))
+    wrong = row[:-1] + (96,)
+    bad = check(C([wrong], 96, 96, 96), "DB", oracle)
+    assert [r["name"] for r in bad if not r["ok"]] == ["daily rows equal the oracle, every amount"]
+    mismatch = check(C([row], 95, 90, 95), "DB", oracle)
+    assert [r["name"] for r in mismatch if not r["ok"]] == ["monthly total equals daily total"]

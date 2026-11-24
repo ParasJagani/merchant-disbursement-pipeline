@@ -11,7 +11,6 @@ venv/
 dbt/target/
 dbt/dbt_packages/
 dbt/logs/
-dbt/profiles.yml
 terraform/.terraform/
 terraform/*.tfstate
 terraform/*.tfstate.backup
@@ -21,3 +20,7 @@ data/
 .DS_Store
 # Local-only list of words that must never appear in this repo (see scripts/check_branding.sh)
 .branding-denylist
+dbt/target/
+dbt/logs/
+dbt/dbt_packages/
+dbt/.user.yml
