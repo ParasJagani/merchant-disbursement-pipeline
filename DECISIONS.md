@@ -56,3 +56,13 @@ integration run against a real account (or an emulator) so this class of error s
 - **A new stream starts empty**, so the streams are created with `SHOW_INITIAL_ROWS = TRUE`; otherwise rows already in bronze would never be merged.
 - **Cost.** Leaf dynamic tables use a 5 minute target lag, so they refresh (and use credits) while resumed. `make demo-down` suspends them. A fresh deploy leaves tasks suspended; dynamic tables start refreshing on creation, so run `make demo-down` after deploying if you will not be using them.
 - **How it is tested.** `silver/local.py` runs the generated SQL on DuckDB (dynamic tables as views, streams as a refilled table). A ledger built only from the silver tables equals the oracle to the cent on the full golden dataset (2,199 account-days, 0 differing rows), and on a small run with malformed messages injected straight into bronze. DuckDB cannot show that Snowflake accepts each statement or that refreshes are incremental; `make silver-verify` checks that on the real account.
+
+## Phase 3 first run (trial account)
+
+Gate passed on the first deploy: 50 statements applied with no changes needed, all 33 checks of
+`make silver-verify` passed. Row counts in every silver and quarantine table equal the counts the
+same SQL produced on DuckDB over the golden files; the ledger built from silver equals the oracle
+(2,199 account-days); all 15 dynamic tables report `INCREMENTAL` refresh mode.
+
+Lesson: running the generated SQL on DuckDB first, against the answer key, meant the real account
+only had to confirm syntax and refresh mode. No Phase 2 style round of fixes was needed.
