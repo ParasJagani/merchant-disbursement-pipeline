@@ -75,3 +75,12 @@ only had to confirm syntax and refresh mode. No Phase 2 style round of fixes was
 - **The oracle is a dbt seed**, so the comparison is a plain dbt test (`gold_matches_oracle`, both directions). A pytest runs the real dbt project on a small world and then breaks the answer key by one cent to prove the test fails.
 - **Materialisation is `table`**, rebuilt by `dbt build`. Gold is small (about 2,200 daily rows for 30 days), so a full rebuild is cheap. Dynamic-table gold is a possible later step if freshness matters.
 - **Admin user for dbt** is the same trial simplification as earlier phases; Phase 8 narrows it to the TRANSFORMER role.
+
+## Phase 4 first run (trial account)
+
+Gate passed on the first run, with no changes needed: `dbt build` finished with 21 of 21 passing
+(one seed, three models, 17 tests, including `gold_matches_oracle`). Gold has 133,801 ledger rows,
+2,199 daily rows and 77 monthly rows. `make gold-verify` confirmed the daily rows equal the oracle
+on every amount, and the daily, monthly and ledger totals all equal 339,370,111 minor units.
+As in Phase 3, running the same SQL on DuckDB against the answer key first left nothing for the
+real account to find.
