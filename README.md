@@ -2,7 +2,7 @@
 
 A Kafka to Snowflake pipeline that turns payment events into a daily disbursement report per merchant, account and currency.
 
-Status: Phases 0 to 3 built (scaffold, generator and oracle, file writer and bronze load, silver). Phase 2 has run against a real Snowflake account and passed its gate (`docs/SETUP_SNOWFLAKE.md`); Phase 3 passes its local gate and is ready for its Snowflake run (`docs/PHASE3_SILVER.md`). See `docs/roadmap.md` for the plan and `DECISIONS.md` for the choices made.
+Status: Phases 0 to 3 built and verified (scaffold, generator and oracle, file writer and bronze load, silver). Phase 2 has run against a real Snowflake account and passed its gate (`docs/SETUP_SNOWFLAKE.md`); Phase 3 has also run on Snowflake and passed its gate (`docs/PHASE3_SILVER.md`). See `docs/roadmap.md` for the plan and `DECISIONS.md` for the choices made.
 
 ## Layout
 
