@@ -33,7 +33,7 @@ from ops.deploy import SQL_DIR, split_statements
 from .check import LEDGER_SQL, oracle_from_rows
 from .spec import EVENT_TOPICS, REFERENCE_TABLES
 
-SILVER_FILES = ("30_silver_reference.sql", "40_silver_events.sql")
+SILVER_FILES = ("30_silver_reference.sql", "40_silver_events.sql", "50_quality.sql")
 SCHEMAS = ("BRONZE", "SILVER", "QUARANTINE", "OPS")
 BRONZE_DDL = (
     "CREATE TABLE IF NOT EXISTS BRONZE.{name} "
@@ -48,6 +48,9 @@ MACROS = (
 
 _INT = re.compile(
     r"IFF\(TYPEOF\(GET_PATH\(raw, '([^']+)'\)\) = 'INTEGER', GET_PATH\(raw, '\1'\)::NUMBER, NULL\)"
+)
+_VARCHAR = re.compile(
+    r"IFF\(TYPEOF\(GET_PATH\(raw, '([^']+)'\)\) = 'VARCHAR', GET_PATH\(raw, '\1'\)::STRING, NULL\)"
 )
 _STR = re.compile(r"GET_PATH\(raw, '([^']+)'\)::STRING")
 _DYNAMIC = re.compile(r"CREATE DYNAMIC TABLE (?:IF NOT EXISTS )?(\S+)\s.*?\nAS\n(.*)", re.DOTALL)
@@ -64,6 +67,13 @@ def translate(statement: str) -> str:
         lambda m: (
             f"CASE WHEN json_type(raw, '$.{m[1]}') IN ('BIGINT', 'UBIGINT') "
             f"THEN json_extract(raw, '$.{m[1]}')::BIGINT END"
+        ),
+        sql,
+    )
+    sql = _VARCHAR.sub(
+        lambda m: (
+            f"CASE WHEN json_type(raw, '$.{m[1]}') = 'VARCHAR' "
+            f"THEN json_extract_string(raw, '$.{m[1]}') END"
         ),
         sql,
     )

@@ -354,3 +354,29 @@ def test_a_failed_merge_does_not_consume_the_stream():
     assert silver.query("SELECT count(*) FROM SILVER.silver_merchants_versions")[0][0] == 0
     assert silver.run_reference()["OPS.MERGE_MERCHANTS"] == "ok"
     assert silver.query("SELECT name FROM SILVER.silver_merchants") == [("A",)]
+
+
+def test_an_upsert_that_arrives_after_its_own_delete_still_fills_the_attributes():
+    """Found by the shuffled-delivery test: a delete merged first left a row with no attributes."""
+    silver = LocalSilver()
+    silver.deploy()
+
+    def msg(seq, etype, op, payload):
+        return json.dumps({
+            "event_id": f"evt_{seq}", "event_type": etype, "entity_id": "m1",
+            "event_time": f"2026-01-0{seq}T00:00:00.000Z", "emitted_at": "2026-01-09T00:00:00.000Z",
+            "schema_version": 1, "sequence": seq, "op": op, "payload": payload,
+        })  # fmt: skip
+
+    delete = msg(2, "merchant_deleted", "delete", {"merchant_id": "m1"})
+    upsert = msg(
+        1, "merchant_upserted", "upsert",
+        {"merchant_id": "m1", "name": "Real name", "country": "DE", "risk_status": "low"},
+    )  # fmt: skip
+    silver.load_bronze("ref_merchants", [(delete, "a", 1)])
+    silver.run_reference()
+    silver.load_bronze("ref_merchants", [(upsert, "b", 1)])
+    silver.run_reference()
+    assert silver.query("SELECT name, is_deleted, last_sequence FROM SILVER.silver_merchants") == [
+        ("Real name", True, 2)
+    ]

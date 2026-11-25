@@ -9,21 +9,21 @@ CREATE DYNAMIC TABLE IF NOT EXISTS {db}.SILVER.typed_transactions
 AS
 WITH parsed AS (
   SELECT
-    GET_PATH(raw, 'event_id')::STRING AS event_id,
-    GET_PATH(raw, 'event_type')::STRING AS event_type,
-    GET_PATH(raw, 'entity_id')::STRING AS entity_id,
+    IFF(TYPEOF(GET_PATH(raw, 'event_id')) = 'VARCHAR', GET_PATH(raw, 'event_id')::STRING, NULL) AS event_id,
+    IFF(TYPEOF(GET_PATH(raw, 'event_type')) = 'VARCHAR', GET_PATH(raw, 'event_type')::STRING, NULL) AS event_type,
+    IFF(TYPEOF(GET_PATH(raw, 'entity_id')) = 'VARCHAR', GET_PATH(raw, 'entity_id')::STRING, NULL) AS entity_id,
     IFF(TYPEOF(GET_PATH(raw, 'schema_version')) = 'INTEGER', GET_PATH(raw, 'schema_version')::NUMBER, NULL) AS schema_version,
     IFF(TYPEOF(GET_PATH(raw, 'sequence')) = 'INTEGER', GET_PATH(raw, 'sequence')::NUMBER, NULL) AS sequence,
-    TRY_TO_TIMESTAMP_NTZ(GET_PATH(raw, 'event_time')::STRING, 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS event_time,
-    TRY_TO_TIMESTAMP_NTZ(GET_PATH(raw, 'emitted_at')::STRING, 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS emitted_at,
-    GET_PATH(raw, 'payload.transaction_id')::STRING AS transaction_id,
-    GET_PATH(raw, 'payload.account_id')::STRING AS account_id,
-    GET_PATH(raw, 'payload.merchant_id')::STRING AS merchant_id,
+    TRY_TO_TIMESTAMP_NTZ(IFF(TYPEOF(GET_PATH(raw, 'event_time')) = 'VARCHAR', GET_PATH(raw, 'event_time')::STRING, NULL), 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS event_time,
+    TRY_TO_TIMESTAMP_NTZ(IFF(TYPEOF(GET_PATH(raw, 'emitted_at')) = 'VARCHAR', GET_PATH(raw, 'emitted_at')::STRING, NULL), 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS emitted_at,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.transaction_id')) = 'VARCHAR', GET_PATH(raw, 'payload.transaction_id')::STRING, NULL) AS transaction_id,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.account_id')) = 'VARCHAR', GET_PATH(raw, 'payload.account_id')::STRING, NULL) AS account_id,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.merchant_id')) = 'VARCHAR', GET_PATH(raw, 'payload.merchant_id')::STRING, NULL) AS merchant_id,
     IFF(TYPEOF(GET_PATH(raw, 'payload.amount')) = 'INTEGER', GET_PATH(raw, 'payload.amount')::NUMBER, NULL) AS amount,
-    GET_PATH(raw, 'payload.currency')::STRING AS currency,
-    GET_PATH(raw, 'payload.payment_method')::STRING AS payment_method,
-    GET_PATH(raw, 'payload.status')::STRING AS status,
-    GET_PATH(raw, 'payload.channel')::STRING AS channel,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.currency')) = 'VARCHAR', GET_PATH(raw, 'payload.currency')::STRING, NULL) AS currency,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.payment_method')) = 'VARCHAR', GET_PATH(raw, 'payload.payment_method')::STRING, NULL) AS payment_method,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.status')) = 'VARCHAR', GET_PATH(raw, 'payload.status')::STRING, NULL) AS status,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.channel')) = 'VARCHAR', GET_PATH(raw, 'payload.channel')::STRING, NULL) AS channel,
     raw,
     source_file,
     source_row,
@@ -36,9 +36,10 @@ checked AS (
       WHEN event_id IS NULL THEN 'missing_event_id'
       WHEN event_type IS NULL THEN 'missing_event_type'
       WHEN entity_id IS NULL THEN 'missing_entity_id'
+      WHEN event_time IS NULL THEN 'bad_type_event_time'
+      WHEN emitted_at IS NULL THEN 'bad_type_emitted_at'
       WHEN schema_version IS NULL THEN 'bad_type_schema_version'
       WHEN sequence IS NULL THEN 'bad_type_sequence'
-      WHEN event_time IS NULL THEN 'bad_type_event_time'
       WHEN schema_version NOT IN (1, 2) THEN 'unknown_schema_version'
       WHEN event_type NOT IN ('authorized', 'captured', 'declined', 'voided') THEN 'unknown_event_type'
       WHEN transaction_id IS NULL THEN 'missing_payload_transaction_id'
@@ -93,20 +94,20 @@ CREATE DYNAMIC TABLE IF NOT EXISTS {db}.SILVER.typed_refunds
 AS
 WITH parsed AS (
   SELECT
-    GET_PATH(raw, 'event_id')::STRING AS event_id,
-    GET_PATH(raw, 'event_type')::STRING AS event_type,
-    GET_PATH(raw, 'entity_id')::STRING AS entity_id,
+    IFF(TYPEOF(GET_PATH(raw, 'event_id')) = 'VARCHAR', GET_PATH(raw, 'event_id')::STRING, NULL) AS event_id,
+    IFF(TYPEOF(GET_PATH(raw, 'event_type')) = 'VARCHAR', GET_PATH(raw, 'event_type')::STRING, NULL) AS event_type,
+    IFF(TYPEOF(GET_PATH(raw, 'entity_id')) = 'VARCHAR', GET_PATH(raw, 'entity_id')::STRING, NULL) AS entity_id,
     IFF(TYPEOF(GET_PATH(raw, 'schema_version')) = 'INTEGER', GET_PATH(raw, 'schema_version')::NUMBER, NULL) AS schema_version,
     IFF(TYPEOF(GET_PATH(raw, 'sequence')) = 'INTEGER', GET_PATH(raw, 'sequence')::NUMBER, NULL) AS sequence,
-    TRY_TO_TIMESTAMP_NTZ(GET_PATH(raw, 'event_time')::STRING, 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS event_time,
-    TRY_TO_TIMESTAMP_NTZ(GET_PATH(raw, 'emitted_at')::STRING, 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS emitted_at,
-    GET_PATH(raw, 'payload.refund_id')::STRING AS refund_id,
-    GET_PATH(raw, 'payload.transaction_id')::STRING AS transaction_id,
-    GET_PATH(raw, 'payload.account_id')::STRING AS account_id,
-    GET_PATH(raw, 'payload.merchant_id')::STRING AS merchant_id,
+    TRY_TO_TIMESTAMP_NTZ(IFF(TYPEOF(GET_PATH(raw, 'event_time')) = 'VARCHAR', GET_PATH(raw, 'event_time')::STRING, NULL), 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS event_time,
+    TRY_TO_TIMESTAMP_NTZ(IFF(TYPEOF(GET_PATH(raw, 'emitted_at')) = 'VARCHAR', GET_PATH(raw, 'emitted_at')::STRING, NULL), 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS emitted_at,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.refund_id')) = 'VARCHAR', GET_PATH(raw, 'payload.refund_id')::STRING, NULL) AS refund_id,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.transaction_id')) = 'VARCHAR', GET_PATH(raw, 'payload.transaction_id')::STRING, NULL) AS transaction_id,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.account_id')) = 'VARCHAR', GET_PATH(raw, 'payload.account_id')::STRING, NULL) AS account_id,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.merchant_id')) = 'VARCHAR', GET_PATH(raw, 'payload.merchant_id')::STRING, NULL) AS merchant_id,
     IFF(TYPEOF(GET_PATH(raw, 'payload.amount')) = 'INTEGER', GET_PATH(raw, 'payload.amount')::NUMBER, NULL) AS amount,
-    GET_PATH(raw, 'payload.currency')::STRING AS currency,
-    GET_PATH(raw, 'payload.reason')::STRING AS reason,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.currency')) = 'VARCHAR', GET_PATH(raw, 'payload.currency')::STRING, NULL) AS currency,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.reason')) = 'VARCHAR', GET_PATH(raw, 'payload.reason')::STRING, NULL) AS reason,
     raw,
     source_file,
     source_row,
@@ -119,9 +120,10 @@ checked AS (
       WHEN event_id IS NULL THEN 'missing_event_id'
       WHEN event_type IS NULL THEN 'missing_event_type'
       WHEN entity_id IS NULL THEN 'missing_entity_id'
+      WHEN event_time IS NULL THEN 'bad_type_event_time'
+      WHEN emitted_at IS NULL THEN 'bad_type_emitted_at'
       WHEN schema_version IS NULL THEN 'bad_type_schema_version'
       WHEN sequence IS NULL THEN 'bad_type_sequence'
-      WHEN event_time IS NULL THEN 'bad_type_event_time'
       WHEN schema_version NOT IN (1, 2) THEN 'unknown_schema_version'
       WHEN event_type NOT IN ('refund_issued') THEN 'unknown_event_type'
       WHEN refund_id IS NULL THEN 'missing_payload_refund_id'
@@ -172,21 +174,21 @@ CREATE DYNAMIC TABLE IF NOT EXISTS {db}.SILVER.typed_disputes
 AS
 WITH parsed AS (
   SELECT
-    GET_PATH(raw, 'event_id')::STRING AS event_id,
-    GET_PATH(raw, 'event_type')::STRING AS event_type,
-    GET_PATH(raw, 'entity_id')::STRING AS entity_id,
+    IFF(TYPEOF(GET_PATH(raw, 'event_id')) = 'VARCHAR', GET_PATH(raw, 'event_id')::STRING, NULL) AS event_id,
+    IFF(TYPEOF(GET_PATH(raw, 'event_type')) = 'VARCHAR', GET_PATH(raw, 'event_type')::STRING, NULL) AS event_type,
+    IFF(TYPEOF(GET_PATH(raw, 'entity_id')) = 'VARCHAR', GET_PATH(raw, 'entity_id')::STRING, NULL) AS entity_id,
     IFF(TYPEOF(GET_PATH(raw, 'schema_version')) = 'INTEGER', GET_PATH(raw, 'schema_version')::NUMBER, NULL) AS schema_version,
     IFF(TYPEOF(GET_PATH(raw, 'sequence')) = 'INTEGER', GET_PATH(raw, 'sequence')::NUMBER, NULL) AS sequence,
-    TRY_TO_TIMESTAMP_NTZ(GET_PATH(raw, 'event_time')::STRING, 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS event_time,
-    TRY_TO_TIMESTAMP_NTZ(GET_PATH(raw, 'emitted_at')::STRING, 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS emitted_at,
-    GET_PATH(raw, 'payload.dispute_id')::STRING AS dispute_id,
-    GET_PATH(raw, 'payload.transaction_id')::STRING AS transaction_id,
-    GET_PATH(raw, 'payload.account_id')::STRING AS account_id,
-    GET_PATH(raw, 'payload.merchant_id')::STRING AS merchant_id,
+    TRY_TO_TIMESTAMP_NTZ(IFF(TYPEOF(GET_PATH(raw, 'event_time')) = 'VARCHAR', GET_PATH(raw, 'event_time')::STRING, NULL), 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS event_time,
+    TRY_TO_TIMESTAMP_NTZ(IFF(TYPEOF(GET_PATH(raw, 'emitted_at')) = 'VARCHAR', GET_PATH(raw, 'emitted_at')::STRING, NULL), 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS emitted_at,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.dispute_id')) = 'VARCHAR', GET_PATH(raw, 'payload.dispute_id')::STRING, NULL) AS dispute_id,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.transaction_id')) = 'VARCHAR', GET_PATH(raw, 'payload.transaction_id')::STRING, NULL) AS transaction_id,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.account_id')) = 'VARCHAR', GET_PATH(raw, 'payload.account_id')::STRING, NULL) AS account_id,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.merchant_id')) = 'VARCHAR', GET_PATH(raw, 'payload.merchant_id')::STRING, NULL) AS merchant_id,
     IFF(TYPEOF(GET_PATH(raw, 'payload.amount')) = 'INTEGER', GET_PATH(raw, 'payload.amount')::NUMBER, NULL) AS amount,
-    GET_PATH(raw, 'payload.currency')::STRING AS currency,
-    GET_PATH(raw, 'payload.reason_code')::STRING AS reason_code,
-    GET_PATH(raw, 'payload.status')::STRING AS status,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.currency')) = 'VARCHAR', GET_PATH(raw, 'payload.currency')::STRING, NULL) AS currency,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.reason_code')) = 'VARCHAR', GET_PATH(raw, 'payload.reason_code')::STRING, NULL) AS reason_code,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.status')) = 'VARCHAR', GET_PATH(raw, 'payload.status')::STRING, NULL) AS status,
     raw,
     source_file,
     source_row,
@@ -199,9 +201,10 @@ checked AS (
       WHEN event_id IS NULL THEN 'missing_event_id'
       WHEN event_type IS NULL THEN 'missing_event_type'
       WHEN entity_id IS NULL THEN 'missing_entity_id'
+      WHEN event_time IS NULL THEN 'bad_type_event_time'
+      WHEN emitted_at IS NULL THEN 'bad_type_emitted_at'
       WHEN schema_version IS NULL THEN 'bad_type_schema_version'
       WHEN sequence IS NULL THEN 'bad_type_sequence'
-      WHEN event_time IS NULL THEN 'bad_type_event_time'
       WHEN schema_version NOT IN (1, 2) THEN 'unknown_schema_version'
       WHEN event_type NOT IN ('dispute_lost', 'dispute_opened', 'dispute_won') THEN 'unknown_event_type'
       WHEN dispute_id IS NULL THEN 'missing_payload_dispute_id'
@@ -257,21 +260,21 @@ CREATE DYNAMIC TABLE IF NOT EXISTS {db}.SILVER.typed_fees
 AS
 WITH parsed AS (
   SELECT
-    GET_PATH(raw, 'event_id')::STRING AS event_id,
-    GET_PATH(raw, 'event_type')::STRING AS event_type,
-    GET_PATH(raw, 'entity_id')::STRING AS entity_id,
+    IFF(TYPEOF(GET_PATH(raw, 'event_id')) = 'VARCHAR', GET_PATH(raw, 'event_id')::STRING, NULL) AS event_id,
+    IFF(TYPEOF(GET_PATH(raw, 'event_type')) = 'VARCHAR', GET_PATH(raw, 'event_type')::STRING, NULL) AS event_type,
+    IFF(TYPEOF(GET_PATH(raw, 'entity_id')) = 'VARCHAR', GET_PATH(raw, 'entity_id')::STRING, NULL) AS entity_id,
     IFF(TYPEOF(GET_PATH(raw, 'schema_version')) = 'INTEGER', GET_PATH(raw, 'schema_version')::NUMBER, NULL) AS schema_version,
     IFF(TYPEOF(GET_PATH(raw, 'sequence')) = 'INTEGER', GET_PATH(raw, 'sequence')::NUMBER, NULL) AS sequence,
-    TRY_TO_TIMESTAMP_NTZ(GET_PATH(raw, 'event_time')::STRING, 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS event_time,
-    TRY_TO_TIMESTAMP_NTZ(GET_PATH(raw, 'emitted_at')::STRING, 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS emitted_at,
-    GET_PATH(raw, 'payload.fee_id')::STRING AS fee_id,
-    GET_PATH(raw, 'payload.transaction_id')::STRING AS transaction_id,
-    GET_PATH(raw, 'payload.account_id')::STRING AS account_id,
-    GET_PATH(raw, 'payload.merchant_id')::STRING AS merchant_id,
-    GET_PATH(raw, 'payload.fee_type')::STRING AS fee_type,
-    GET_PATH(raw, 'payload.fee_subtype')::STRING AS fee_subtype,
+    TRY_TO_TIMESTAMP_NTZ(IFF(TYPEOF(GET_PATH(raw, 'event_time')) = 'VARCHAR', GET_PATH(raw, 'event_time')::STRING, NULL), 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS event_time,
+    TRY_TO_TIMESTAMP_NTZ(IFF(TYPEOF(GET_PATH(raw, 'emitted_at')) = 'VARCHAR', GET_PATH(raw, 'emitted_at')::STRING, NULL), 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS emitted_at,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.fee_id')) = 'VARCHAR', GET_PATH(raw, 'payload.fee_id')::STRING, NULL) AS fee_id,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.transaction_id')) = 'VARCHAR', GET_PATH(raw, 'payload.transaction_id')::STRING, NULL) AS transaction_id,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.account_id')) = 'VARCHAR', GET_PATH(raw, 'payload.account_id')::STRING, NULL) AS account_id,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.merchant_id')) = 'VARCHAR', GET_PATH(raw, 'payload.merchant_id')::STRING, NULL) AS merchant_id,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.fee_type')) = 'VARCHAR', GET_PATH(raw, 'payload.fee_type')::STRING, NULL) AS fee_type,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.fee_subtype')) = 'VARCHAR', GET_PATH(raw, 'payload.fee_subtype')::STRING, NULL) AS fee_subtype,
     IFF(TYPEOF(GET_PATH(raw, 'payload.amount')) = 'INTEGER', GET_PATH(raw, 'payload.amount')::NUMBER, NULL) AS amount,
-    GET_PATH(raw, 'payload.currency')::STRING AS currency,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.currency')) = 'VARCHAR', GET_PATH(raw, 'payload.currency')::STRING, NULL) AS currency,
     raw,
     source_file,
     source_row,
@@ -284,9 +287,10 @@ checked AS (
       WHEN event_id IS NULL THEN 'missing_event_id'
       WHEN event_type IS NULL THEN 'missing_event_type'
       WHEN entity_id IS NULL THEN 'missing_entity_id'
+      WHEN event_time IS NULL THEN 'bad_type_event_time'
+      WHEN emitted_at IS NULL THEN 'bad_type_emitted_at'
       WHEN schema_version IS NULL THEN 'bad_type_schema_version'
       WHEN sequence IS NULL THEN 'bad_type_sequence'
-      WHEN event_time IS NULL THEN 'bad_type_event_time'
       WHEN schema_version NOT IN (1, 2) THEN 'unknown_schema_version'
       WHEN event_type NOT IN ('fee_assessed') THEN 'unknown_event_type'
       WHEN fee_id IS NULL THEN 'missing_payload_fee_id'
@@ -340,20 +344,20 @@ CREATE DYNAMIC TABLE IF NOT EXISTS {db}.SILVER.typed_adjustments
 AS
 WITH parsed AS (
   SELECT
-    GET_PATH(raw, 'event_id')::STRING AS event_id,
-    GET_PATH(raw, 'event_type')::STRING AS event_type,
-    GET_PATH(raw, 'entity_id')::STRING AS entity_id,
+    IFF(TYPEOF(GET_PATH(raw, 'event_id')) = 'VARCHAR', GET_PATH(raw, 'event_id')::STRING, NULL) AS event_id,
+    IFF(TYPEOF(GET_PATH(raw, 'event_type')) = 'VARCHAR', GET_PATH(raw, 'event_type')::STRING, NULL) AS event_type,
+    IFF(TYPEOF(GET_PATH(raw, 'entity_id')) = 'VARCHAR', GET_PATH(raw, 'entity_id')::STRING, NULL) AS entity_id,
     IFF(TYPEOF(GET_PATH(raw, 'schema_version')) = 'INTEGER', GET_PATH(raw, 'schema_version')::NUMBER, NULL) AS schema_version,
     IFF(TYPEOF(GET_PATH(raw, 'sequence')) = 'INTEGER', GET_PATH(raw, 'sequence')::NUMBER, NULL) AS sequence,
-    TRY_TO_TIMESTAMP_NTZ(GET_PATH(raw, 'event_time')::STRING, 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS event_time,
-    TRY_TO_TIMESTAMP_NTZ(GET_PATH(raw, 'emitted_at')::STRING, 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS emitted_at,
-    GET_PATH(raw, 'payload.adjustment_id')::STRING AS adjustment_id,
-    GET_PATH(raw, 'payload.account_id')::STRING AS account_id,
-    GET_PATH(raw, 'payload.merchant_id')::STRING AS merchant_id,
+    TRY_TO_TIMESTAMP_NTZ(IFF(TYPEOF(GET_PATH(raw, 'event_time')) = 'VARCHAR', GET_PATH(raw, 'event_time')::STRING, NULL), 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS event_time,
+    TRY_TO_TIMESTAMP_NTZ(IFF(TYPEOF(GET_PATH(raw, 'emitted_at')) = 'VARCHAR', GET_PATH(raw, 'emitted_at')::STRING, NULL), 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS emitted_at,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.adjustment_id')) = 'VARCHAR', GET_PATH(raw, 'payload.adjustment_id')::STRING, NULL) AS adjustment_id,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.account_id')) = 'VARCHAR', GET_PATH(raw, 'payload.account_id')::STRING, NULL) AS account_id,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.merchant_id')) = 'VARCHAR', GET_PATH(raw, 'payload.merchant_id')::STRING, NULL) AS merchant_id,
     IFF(TYPEOF(GET_PATH(raw, 'payload.amount')) = 'INTEGER', GET_PATH(raw, 'payload.amount')::NUMBER, NULL) AS amount,
-    GET_PATH(raw, 'payload.currency')::STRING AS currency,
-    GET_PATH(raw, 'payload.reason_code')::STRING AS reason_code,
-    GET_PATH(raw, 'payload.approver')::STRING AS approver,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.currency')) = 'VARCHAR', GET_PATH(raw, 'payload.currency')::STRING, NULL) AS currency,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.reason_code')) = 'VARCHAR', GET_PATH(raw, 'payload.reason_code')::STRING, NULL) AS reason_code,
+    IFF(TYPEOF(GET_PATH(raw, 'payload.approver')) = 'VARCHAR', GET_PATH(raw, 'payload.approver')::STRING, NULL) AS approver,
     raw,
     source_file,
     source_row,
@@ -366,9 +370,10 @@ checked AS (
       WHEN event_id IS NULL THEN 'missing_event_id'
       WHEN event_type IS NULL THEN 'missing_event_type'
       WHEN entity_id IS NULL THEN 'missing_entity_id'
+      WHEN event_time IS NULL THEN 'bad_type_event_time'
+      WHEN emitted_at IS NULL THEN 'bad_type_emitted_at'
       WHEN schema_version IS NULL THEN 'bad_type_schema_version'
       WHEN sequence IS NULL THEN 'bad_type_sequence'
-      WHEN event_time IS NULL THEN 'bad_type_event_time'
       WHEN schema_version NOT IN (1, 2) THEN 'unknown_schema_version'
       WHEN event_type NOT IN ('adjustment_posted') THEN 'unknown_event_type'
       WHEN adjustment_id IS NULL THEN 'missing_payload_adjustment_id'

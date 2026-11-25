@@ -84,3 +84,13 @@ Gate passed on the first run, with no changes needed: `dbt build` finished with 
 on every amount, and the daily, monthly and ledger totals all equal 339,370,111 minor units.
 As in Phase 3, running the same SQL on DuckDB against the answer key first left nothing for the
 real account to find.
+
+## Phase 5 notes (quality and errors)
+
+- **"Lost silently" is defined as an accounting identity.** Every delivered message is dead-lettered, quarantined, counted as a duplicate, or kept; `OPS.silver_reconciliation` checks it with live data, and the tests check that every business event the generator produced is in silver exactly once.
+- **Silver is at least as strict as the writer.** Strings must be JSON strings, numbers must be JSON integers, `emitted_at` and the envelope are checked, and the reference track has the same envelope checks as events. Messages the writer already refuses are quarantined with the same reason if they ever reach bronze.
+- **A catalog of bad messages is the contract** (`silver/faults.py`, about 430 messages). It runs against both validators in tests and is injected into real bronze tables by the chaos drill. Only messages silver must reject are injected, so the drill cannot add business data.
+- **Property tests found a real bug**: if a delete reached the reference track before its own earlier upsert, the current row stayed empty forever. The current row is now recomputed from all versions whenever they change.
+- **`ON_ERROR = SKIP_FILE` is kept but watched.** It makes a bad file fail loudly in COPY history instead of loading half of it; `verify_quality` compares staged files, load history and bronze so a skipped file cannot go unnoticed.
+- **Optional fields with the wrong type are treated as absent**, not rejected, because the writer does not check them either. Revisit if an optional field ever drives money.
+- **Dynamic tables still do not block on bad data.** Quarantine is the control, and Phase 6 adds an alert on `reject_summary`.

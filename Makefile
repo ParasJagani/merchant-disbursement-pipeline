@@ -1,4 +1,4 @@
-.PHONY: lint test branding check up down golden live stage deploy verify demo-up demo-down silver-render silver-verify silver-reset dbt-oracle dbt-local gold gold-verify
+.PHONY: lint test branding check up down golden live stage deploy verify demo-up demo-down silver-render silver-verify silver-reset dbt-oracle dbt-local gold gold-verify silver-refresh quality-verify chaos-plan chaos-drill
 lint:
 	ruff check .
 	ruff format --check .
@@ -40,3 +40,11 @@ gold:
 	dbt build --project-dir dbt --profiles-dir dbt --target snowflake
 gold-verify:
 	python -m ops.verify_gold
+silver-refresh:
+	python -m ops.refresh_silver
+quality-verify:
+	python -m ops.verify_quality
+chaos-plan:
+	python -m ops.chaos_drill
+chaos-drill:
+	python -m ops.chaos_drill --run

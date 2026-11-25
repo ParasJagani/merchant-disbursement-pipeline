@@ -327,3 +327,13 @@ def test_verify_gold_flags_a_single_wrong_amount():
     assert [r["name"] for r in bad if not r["ok"]] == ["daily rows equal the oracle, every amount"]
     mismatch = check(C([row], 95, 90, 95), "DB", oracle)
     assert [r["name"] for r in mismatch if not r["ok"]] == ["monthly total equals daily total"]
+
+
+def test_refresh_silver_runs_each_merge_then_refreshes_every_dynamic_table():
+    from ops.refresh_silver import statements
+    from silver.spec import DYNAMIC_TABLES
+
+    todo = statements("DB")
+    assert todo[:2] == ["CALL DB.OPS.MERGE_MERCHANTS()", "CALL DB.OPS.MERGE_ACCOUNTS()"]
+    assert len(todo) == 2 + len(DYNAMIC_TABLES) == 17
+    assert all(s.startswith("ALTER DYNAMIC TABLE DB.") and s.endswith(" REFRESH") for s in todo[2:])

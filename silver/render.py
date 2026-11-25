@@ -39,7 +39,10 @@ HEADER = (
 
 # -- small SQL builders ------------------------------------------------------------------------
 def _str(path: str) -> str:
-    return f"GET_PATH(raw, '{path}')::STRING"
+    # Only a JSON string counts. A number in a string field is "missing", not silently stringified.
+    return (
+        f"IFF(TYPEOF(GET_PATH(raw, '{path}')) = 'VARCHAR', GET_PATH(raw, '{path}')::STRING, NULL)"
+    )
 
 
 def _num(path: str) -> str:
@@ -67,11 +70,23 @@ def _indent(text: str, n: int) -> str:
 
 
 # -- reference track: streams, tasks and MERGE --------------------------------------------------
-def _reference_reject_case(t: ReferenceTable) -> str:
-    whens = [
+def _envelope_whens(types: tuple[str, ...]) -> list[str]:
+    """The envelope checks every message must pass, in the order the file writer applies them."""
+    return [
         "event_id IS NULL THEN 'missing_event_id'",
-        "sequence IS NULL THEN 'bad_type_sequence'",
+        "event_type IS NULL THEN 'missing_event_type'",
+        "entity_id IS NULL THEN 'missing_entity_id'",
         "event_time IS NULL THEN 'bad_type_event_time'",
+        "emitted_at IS NULL THEN 'bad_type_emitted_at'",
+        "schema_version IS NULL THEN 'bad_type_schema_version'",
+        "sequence IS NULL THEN 'bad_type_sequence'",
+        f"schema_version NOT IN ({', '.join(str(v) for v in VALID_SCHEMA_VERSIONS)}) THEN 'unknown_schema_version'",
+        f"event_type NOT IN ({_in(types)}) THEN 'unknown_event_type'",
+    ]
+
+
+def _reference_reject_case(t: ReferenceTable) -> str:
+    whens = _envelope_whens(t.event_types) + [
         "COALESCE(op, '') NOT IN ('upsert', 'delete') THEN 'bad_op'",
         f"{t.key} IS NULL THEN 'missing_payload_{t.key}'",
     ]
@@ -87,13 +102,18 @@ def _reference_reject_case(t: ReferenceTable) -> str:
     return "CASE\n" + _indent(body, 2) + "\nEND"
 
 
-def _reference_batch(t: ReferenceTable) -> str:
-    """The CTEs that read the stream, parse it and flag bad rows. Used by every statement."""
+def _reference_batch(t: ReferenceTable, source: str | None = None) -> str:
+    """The CTEs that read the stream (or any table of bronze rows), parse and flag bad rows."""
+    source = source or f"{DB}.BRONZE.{t.bronze}_stream"
     cols = [
         f"{_str('event_id')} AS event_id",
+        f"{_str('event_type')} AS event_type",
+        f"{_str('entity_id')} AS entity_id",
         f"{_str('op')} AS op",
+        f"{_num('schema_version')} AS schema_version",
         f"{_num('sequence')} AS sequence",
         f"{_ts('event_time')} AS event_time",
+        f"{_ts('emitted_at')} AS emitted_at",
         f"{_str('payload.' + t.key)} AS {t.key}",
     ]
     cols += [f"{_field_expr(f)} AS {f.name}" for f in t.fields]
@@ -103,7 +123,7 @@ def _reference_batch(t: ReferenceTable) -> str:
         "WITH parsed AS (\n"
         "  SELECT\n"
         f"{parsed}\n"
-        f"  FROM {DB}.BRONZE.{t.bronze}_stream\n"
+        f"  FROM {source}\n"
         "),\n"
         "checked AS (\n"
         "  SELECT *,\n"
@@ -127,6 +147,15 @@ def render_reference(t: ReferenceTable) -> str:
     ver_cols = [t.key, "sequence", "event_id", "is_deleted", *attrs, "valid_from"]
     ver_cols_sql = ", ".join(ver_cols + ["loaded_at", "source_file", "source_row"])
     set_attrs = ",\n".join(f"      {a} = s.{a}" for a in attrs)
+    # The row is recomputed from all versions, so a late older version can still change it (for
+    # example the upsert that arrives after the delete that was merged first).
+    changed = " OR ".join(
+        [
+            "t.last_sequence IS DISTINCT FROM s.sequence",
+            "t.is_deleted IS DISTINCT FROM s.is_deleted",
+        ]
+        + [f"t.{a} IS DISTINCT FROM s.{a}" for a in attrs]
+    )
     # A delete carries only the key. The current row takes its attributes from the newest upsert
     # and its is_deleted / sequence from the newest version, so a deleted row keeps what it was.
     latest_attrs = ", ".join(
@@ -237,7 +266,7 @@ BEGIN
     QUALIFY ROW_NUMBER() OVER (PARTITION BY {t.key} ORDER BY sequence DESC) = 1
   ) s
   ON t.{t.key} = s.{t.key}
-  WHEN MATCHED AND s.sequence > t.last_sequence THEN UPDATE SET
+  WHEN MATCHED AND ({changed}) THEN UPDATE SET
 {set_attrs},
       is_deleted = s.is_deleted,
       last_sequence = s.sequence,
@@ -267,15 +296,7 @@ AS
 
 # -- event track: dynamic tables -----------------------------------------------------------------
 def _event_reject_case(t: EventTopic) -> str:
-    whens = [
-        "event_id IS NULL THEN 'missing_event_id'",
-        "event_type IS NULL THEN 'missing_event_type'",
-        "entity_id IS NULL THEN 'missing_entity_id'",
-        "schema_version IS NULL THEN 'bad_type_schema_version'",
-        "sequence IS NULL THEN 'bad_type_sequence'",
-        "event_time IS NULL THEN 'bad_type_event_time'",
-        f"schema_version NOT IN ({', '.join(str(v) for v in VALID_SCHEMA_VERSIONS)}) THEN 'unknown_schema_version'",
-        f"event_type NOT IN ({_in(t.event_types)}) THEN 'unknown_event_type'",
+    whens = _envelope_whens(t.event_types) + [
         f"{t.key} IS NULL THEN 'missing_payload_{t.key}'",
     ]
     for f in t.fields:
@@ -489,6 +510,73 @@ WHERE NOT is_valid;
 """
 
 
+# -- quality views ------------------------------------------------------------------------------
+def _recon_columns(topic: str, rejected: str, dups: str, unique: str, expected: str, actual: str):
+    return (
+        f"SELECT '{topic}' AS topic, __BRONZE__ AS bronze_rows,\n"
+        f"  {rejected} AS rejected_rows, {dups} AS duplicate_rows, {unique} AS unique_valid_events,\n"
+        f"  {expected} AS entities_expected, {actual} AS entities_actual"
+    )
+
+
+def render_recon_reference(t: ReferenceTable) -> str:
+    batch = _reference_batch(t, source=f"{DB}.BRONZE.{t.bronze}")
+    cols = _recon_columns(
+        t.topic,
+        f"(SELECT COUNT(*) FROM {DB}.QUARANTINE.rejected_{t.name})",
+        "(SELECT COUNT(*) FROM checked WHERE reject_reason IS NULL)"
+        f" - (SELECT COUNT(*) FROM (SELECT DISTINCT {t.key}, sequence FROM checked"
+        " WHERE reject_reason IS NULL) d)",
+        f"(SELECT COUNT(*) FROM {DB}.SILVER.silver_{t.name}_versions)",
+        f"(SELECT COUNT(DISTINCT {t.key}) FROM checked WHERE reject_reason IS NULL)",
+        f"(SELECT COUNT(*) FROM {DB}.SILVER.silver_{t.name})",
+    ).replace("__BRONZE__", "(SELECT COUNT(*) FROM checked)")
+    return (
+        f"-- Re-reads bronze and compares it with what the stream track produced. A stream that has\n"
+        f"-- not run yet shows up as unaccounted rows, never as silence.\n"
+        f"CREATE OR REPLACE VIEW {DB}.OPS.recon_{t.name} AS\n{batch}\n{cols};\n"
+    )
+
+
+def render_recon_event(t: EventTopic) -> str:
+    cols = _recon_columns(
+        t.topic,
+        f"(SELECT COUNT(*) FROM {DB}.QUARANTINE.rejected_{t.name})",
+        "COUNT(CASE WHEN is_valid AND dup_rank > 1 THEN 1 END)",
+        "COUNT(CASE WHEN is_valid AND dup_rank = 1 THEN 1 END)",
+        f"COUNT(DISTINCT CASE WHEN is_valid THEN {t.key} END)",
+        f"(SELECT COUNT(*) FROM {DB}.SILVER.silver_{t.name})",
+    ).replace("__BRONZE__", f"(SELECT COUNT(*) FROM {DB}.BRONZE.{t.bronze})")
+    return (
+        f"CREATE OR REPLACE VIEW {DB}.OPS.recon_{t.name} AS\n"
+        f"{cols}\nFROM {DB}.SILVER.typed_{t.name};\n"
+    )
+
+
+def render_quality() -> str:
+    tables = (*REFERENCE_TABLES, *EVENT_TOPICS)
+    summary = "\nUNION ALL\n".join(
+        f"SELECT '{t.topic}' AS topic, reject_reason, COUNT(*) AS messages,\n"
+        f"       MIN(loaded_at) AS first_loaded, MAX(loaded_at) AS last_loaded\n"
+        f"FROM {DB}.QUARANTINE.rejected_{t.name} GROUP BY reject_reason"
+        for t in tables
+    )
+    recon = "\nUNION ALL\n".join(f"SELECT * FROM {DB}.OPS.recon_{t.name}" for t in tables)
+    return (
+        "-- ---- one line per topic and reason: what was rejected and why ----\n"
+        f"CREATE OR REPLACE VIEW {DB}.QUARANTINE.reject_summary AS\n{summary};\n\n"
+        + "\n".join(render_recon_reference(t) for t in REFERENCE_TABLES)
+        + "\n"
+        + "\n".join(render_recon_event(t) for t in EVENT_TOPICS)
+        + "\n-- ---- the no-silent-loss check: unaccounted_rows and missing_entities must be 0 ----\n"
+        f"CREATE OR REPLACE VIEW {DB}.OPS.silver_reconciliation AS\n"
+        "SELECT *,\n"
+        "       bronze_rows - rejected_rows - duplicate_rows - unique_valid_events AS unaccounted_rows,\n"
+        "       entities_expected - entities_actual AS missing_entities\n"
+        f"FROM (\n{_indent(recon, 2)}\n);\n"
+    )
+
+
 # -- files ---------------------------------------------------------------------------------------
 def render_files() -> dict[str, str]:
     reference = HEADER + "\n" + "\n".join(render_reference(t) for t in REFERENCE_TABLES)
@@ -499,7 +587,12 @@ def render_files() -> dict[str, str]:
         + "\n"
         + "\n".join(render_silver(t) for t in EVENT_TOPICS)
     )
-    return {"30_silver_reference.sql": reference, "40_silver_events.sql": events}
+    quality = HEADER + "\n" + render_quality()
+    return {
+        "30_silver_reference.sql": reference,
+        "40_silver_events.sql": events,
+        "50_quality.sql": quality,
+    }
 
 
 def main(argv=None) -> int:
