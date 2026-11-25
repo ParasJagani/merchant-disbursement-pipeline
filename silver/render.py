@@ -52,8 +52,16 @@ def _num(path: str) -> str:
     )
 
 
+TS_SHAPE = "[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z"
+
+
 def _ts(path: str) -> str:
-    return f"TRY_TO_TIMESTAMP_NTZ({_str(path)}, '{TS_FORMAT}')"
+    # The shape is checked first because Snowflake's FF3 also accepts a timestamp with no
+    # fractional seconds, which the writer's contract does not allow (found by the chaos drill).
+    text = f"GET_PATH(raw, '{path}')::STRING"
+    return (
+        f"TRY_TO_TIMESTAMP_NTZ(IFF(REGEXP_LIKE({text}, '{TS_SHAPE}'), {text}, NULL), '{TS_FORMAT}')"
+    )
 
 
 def _in(values) -> str:

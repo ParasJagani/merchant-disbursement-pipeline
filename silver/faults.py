@@ -169,6 +169,24 @@ def _envelope_faults(topic: str, table) -> list[Fault]:
         "bad_type_emitted_at", "silver_only")  # fmt: skip
     add("event_time without milliseconds", _with(base, ("event_time",), "2026-01-05T10:00:00Z"),
         "bad_type_event_time", "silver_only")  # fmt: skip
+    for label, value in [
+        ("fraction with 1 digit", "2026-01-05T10:00:00.5Z"),
+        ("fraction with 6 digits", "2026-01-05T10:00:00.123456Z"),
+        ("lower-case t", "2026-01-05t10:00:00.000Z"),
+        ("with an offset instead of Z", "2026-01-05T10:00:00.000+00:00"),
+        ("without Z", "2026-01-05T10:00:00.000"),
+        ("with a space instead of T", "2026-01-05 10:00:00.000Z"),
+        ("a date only", "2026-01-05"),
+        ("an impossible date", "2026-02-30T10:00:00.000Z"),
+        ("an impossible hour", "2026-01-05T25:00:00.000Z"),
+        ("an empty string", ""),
+    ]:
+        add(f"event_time {label}", _with(base, ("event_time",), value), "bad_type_event_time",
+            "silver_only")  # fmt: skip
+        add(f"emitted_at {label}", _with(base, ("emitted_at",), value), "bad_type_emitted_at",
+            "silver_only")  # fmt: skip
+    add("event_time at the start of the epoch", _with(base, ("event_time",),
+        "1970-01-01T00:00:00.000Z"), None, "accepted")  # fmt: skip
     add("schema_version 99", _with(base, ("schema_version",), 99), "unknown_schema_version", "both")
     add("schema_version 0", _with(base, ("schema_version",), 0), "unknown_schema_version", "both")
     add("unknown event_type", _with(base, ("event_type",), "teleported"), "unknown_event_type",

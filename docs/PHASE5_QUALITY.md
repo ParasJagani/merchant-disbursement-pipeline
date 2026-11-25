@@ -34,7 +34,7 @@ Silver is at least as strict as the file writer, so a message that slips past th
 
 Two choices worth knowing. An optional field with the wrong type is treated as absent, not rejected. And unusual but valid messages are accepted on purpose: an unknown extra field, schema version 2, a fee of 0, a negative adjustment, an amount above 32 bits.
 
-The full list is `silver/faults.py`: 491 messages, each with the exact reason it must get (the 432 that must be rejected are the ones the drill injects).
+The full list is `silver/faults.py`: 638 messages, each with the exact reason it must get (the 572 that must be rejected are the ones the drill injects).
 
 ## How it is tested (no Snowflake needed)
 
@@ -59,7 +59,7 @@ make silver-verify                   # Phase 3 gate again: counts and the ledger
 make gold                            # dbt build: gold still equals the oracle
 make quality-verify                  # the Phase 5 gate (below)
 make chaos-plan                      # shows what the drill would inject
-make chaos-drill                     # injects 432 bad messages, checks, cleans up
+make chaos-drill                     # injects 572 bad messages, checks, cleans up
 make demo-down                       # always, last
 ```
 
@@ -76,7 +76,7 @@ make demo-down                       # always, last
 | `quality-verify`: staged files never loaded | A file was staged but the load task has not run, or `ON_ERROR = SKIP_FILE` skipped it. The detail names the files; check `COPY_HISTORY` |
 | `quality-verify`: dead letters do not equal | `data/dlq` is from a different dataset than `data/golden`, or a stage ran with different data |
 | `chaos-drill`: "before" checks fail | Silver is not populated or not refreshed; run `make silver-refresh` |
-| `chaos-drill` interrupted | The drill cleans up in a `finally` block. If your terminal died mid-run, delete rows with source file `chaos/<id>.ndjson` from the bronze tables and the two reference rejected tables, then refresh |
+| `chaos-drill` interrupted | The drill cleans up in a `finally` block. If your terminal died mid-run, run `python -m ops.chaos_drill --cleanup <drill id>` (the id is printed at the start of every run, and is the name of the `chaos/<id>.ndjson` source file) |
 
 ## Replay and recovery
 

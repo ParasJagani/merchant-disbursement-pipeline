@@ -41,6 +41,8 @@ BRONZE_DDL = (
 )
 MACROS = (
     "CREATE OR REPLACE MACRO iff(c, a, b) AS CASE WHEN c THEN a ELSE b END",
+    # Snowflake's REGEXP_LIKE must match the whole string; DuckDB's regexp_matches does not.
+    "CREATE OR REPLACE MACRO regexp_like(s, p) AS regexp_full_match(s, p)",
     # Snowflake's format string is ignored; the generated SQL always uses the same ISO format.
     "CREATE OR REPLACE MACRO try_to_timestamp_ntz(x, fmt) AS "
     "TRY_STRPTIME(x, '%Y-%m-%dT%H:%M:%S.%gZ')",
