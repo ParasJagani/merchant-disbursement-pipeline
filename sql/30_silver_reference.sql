@@ -69,15 +69,19 @@ BEGIN
   INSERT INTO {db}.QUARANTINE.rejected_merchants (event_id, entity_id, sequence, reject_reason, raw, source_file, source_row, loaded_at)
   WITH parsed AS (
     SELECT
-      GET_PATH(raw, 'event_id')::STRING AS event_id,
-      GET_PATH(raw, 'op')::STRING AS op,
+      IFF(TYPEOF(GET_PATH(raw, 'event_id')) = 'VARCHAR', GET_PATH(raw, 'event_id')::STRING, NULL) AS event_id,
+      IFF(TYPEOF(GET_PATH(raw, 'event_type')) = 'VARCHAR', GET_PATH(raw, 'event_type')::STRING, NULL) AS event_type,
+      IFF(TYPEOF(GET_PATH(raw, 'entity_id')) = 'VARCHAR', GET_PATH(raw, 'entity_id')::STRING, NULL) AS entity_id,
+      IFF(TYPEOF(GET_PATH(raw, 'op')) = 'VARCHAR', GET_PATH(raw, 'op')::STRING, NULL) AS op,
+      IFF(TYPEOF(GET_PATH(raw, 'schema_version')) = 'INTEGER', GET_PATH(raw, 'schema_version')::NUMBER, NULL) AS schema_version,
       IFF(TYPEOF(GET_PATH(raw, 'sequence')) = 'INTEGER', GET_PATH(raw, 'sequence')::NUMBER, NULL) AS sequence,
-      TRY_TO_TIMESTAMP_NTZ(GET_PATH(raw, 'event_time')::STRING, 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS event_time,
-      GET_PATH(raw, 'payload.merchant_id')::STRING AS merchant_id,
-      GET_PATH(raw, 'payload.name')::STRING AS name,
-      GET_PATH(raw, 'payload.country')::STRING AS country,
-      GET_PATH(raw, 'payload.vertical')::STRING AS vertical,
-      GET_PATH(raw, 'payload.risk_status')::STRING AS risk_status,
+      TRY_TO_TIMESTAMP_NTZ(IFF(TYPEOF(GET_PATH(raw, 'event_time')) = 'VARCHAR', GET_PATH(raw, 'event_time')::STRING, NULL), 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS event_time,
+      TRY_TO_TIMESTAMP_NTZ(IFF(TYPEOF(GET_PATH(raw, 'emitted_at')) = 'VARCHAR', GET_PATH(raw, 'emitted_at')::STRING, NULL), 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS emitted_at,
+      IFF(TYPEOF(GET_PATH(raw, 'payload.merchant_id')) = 'VARCHAR', GET_PATH(raw, 'payload.merchant_id')::STRING, NULL) AS merchant_id,
+      IFF(TYPEOF(GET_PATH(raw, 'payload.name')) = 'VARCHAR', GET_PATH(raw, 'payload.name')::STRING, NULL) AS name,
+      IFF(TYPEOF(GET_PATH(raw, 'payload.country')) = 'VARCHAR', GET_PATH(raw, 'payload.country')::STRING, NULL) AS country,
+      IFF(TYPEOF(GET_PATH(raw, 'payload.vertical')) = 'VARCHAR', GET_PATH(raw, 'payload.vertical')::STRING, NULL) AS vertical,
+      IFF(TYPEOF(GET_PATH(raw, 'payload.risk_status')) = 'VARCHAR', GET_PATH(raw, 'payload.risk_status')::STRING, NULL) AS risk_status,
       raw,
       source_file,
       source_row,
@@ -88,8 +92,14 @@ BEGIN
     SELECT *,
       CASE
         WHEN event_id IS NULL THEN 'missing_event_id'
-        WHEN sequence IS NULL THEN 'bad_type_sequence'
+        WHEN event_type IS NULL THEN 'missing_event_type'
+        WHEN entity_id IS NULL THEN 'missing_entity_id'
         WHEN event_time IS NULL THEN 'bad_type_event_time'
+        WHEN emitted_at IS NULL THEN 'bad_type_emitted_at'
+        WHEN schema_version IS NULL THEN 'bad_type_schema_version'
+        WHEN sequence IS NULL THEN 'bad_type_sequence'
+        WHEN schema_version NOT IN (1, 2) THEN 'unknown_schema_version'
+        WHEN event_type NOT IN ('merchant_deleted', 'merchant_upserted') THEN 'unknown_event_type'
         WHEN COALESCE(op, '') NOT IN ('upsert', 'delete') THEN 'bad_op'
         WHEN merchant_id IS NULL THEN 'missing_payload_merchant_id'
         WHEN op = 'upsert' AND name IS NULL THEN 'missing_payload_name'
@@ -107,15 +117,19 @@ BEGIN
   USING (
     WITH parsed AS (
       SELECT
-        GET_PATH(raw, 'event_id')::STRING AS event_id,
-        GET_PATH(raw, 'op')::STRING AS op,
+        IFF(TYPEOF(GET_PATH(raw, 'event_id')) = 'VARCHAR', GET_PATH(raw, 'event_id')::STRING, NULL) AS event_id,
+        IFF(TYPEOF(GET_PATH(raw, 'event_type')) = 'VARCHAR', GET_PATH(raw, 'event_type')::STRING, NULL) AS event_type,
+        IFF(TYPEOF(GET_PATH(raw, 'entity_id')) = 'VARCHAR', GET_PATH(raw, 'entity_id')::STRING, NULL) AS entity_id,
+        IFF(TYPEOF(GET_PATH(raw, 'op')) = 'VARCHAR', GET_PATH(raw, 'op')::STRING, NULL) AS op,
+        IFF(TYPEOF(GET_PATH(raw, 'schema_version')) = 'INTEGER', GET_PATH(raw, 'schema_version')::NUMBER, NULL) AS schema_version,
         IFF(TYPEOF(GET_PATH(raw, 'sequence')) = 'INTEGER', GET_PATH(raw, 'sequence')::NUMBER, NULL) AS sequence,
-        TRY_TO_TIMESTAMP_NTZ(GET_PATH(raw, 'event_time')::STRING, 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS event_time,
-        GET_PATH(raw, 'payload.merchant_id')::STRING AS merchant_id,
-        GET_PATH(raw, 'payload.name')::STRING AS name,
-        GET_PATH(raw, 'payload.country')::STRING AS country,
-        GET_PATH(raw, 'payload.vertical')::STRING AS vertical,
-        GET_PATH(raw, 'payload.risk_status')::STRING AS risk_status,
+        TRY_TO_TIMESTAMP_NTZ(IFF(TYPEOF(GET_PATH(raw, 'event_time')) = 'VARCHAR', GET_PATH(raw, 'event_time')::STRING, NULL), 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS event_time,
+        TRY_TO_TIMESTAMP_NTZ(IFF(TYPEOF(GET_PATH(raw, 'emitted_at')) = 'VARCHAR', GET_PATH(raw, 'emitted_at')::STRING, NULL), 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS emitted_at,
+        IFF(TYPEOF(GET_PATH(raw, 'payload.merchant_id')) = 'VARCHAR', GET_PATH(raw, 'payload.merchant_id')::STRING, NULL) AS merchant_id,
+        IFF(TYPEOF(GET_PATH(raw, 'payload.name')) = 'VARCHAR', GET_PATH(raw, 'payload.name')::STRING, NULL) AS name,
+        IFF(TYPEOF(GET_PATH(raw, 'payload.country')) = 'VARCHAR', GET_PATH(raw, 'payload.country')::STRING, NULL) AS country,
+        IFF(TYPEOF(GET_PATH(raw, 'payload.vertical')) = 'VARCHAR', GET_PATH(raw, 'payload.vertical')::STRING, NULL) AS vertical,
+        IFF(TYPEOF(GET_PATH(raw, 'payload.risk_status')) = 'VARCHAR', GET_PATH(raw, 'payload.risk_status')::STRING, NULL) AS risk_status,
         raw,
         source_file,
         source_row,
@@ -126,8 +140,14 @@ BEGIN
       SELECT *,
         CASE
           WHEN event_id IS NULL THEN 'missing_event_id'
-          WHEN sequence IS NULL THEN 'bad_type_sequence'
+          WHEN event_type IS NULL THEN 'missing_event_type'
+          WHEN entity_id IS NULL THEN 'missing_entity_id'
           WHEN event_time IS NULL THEN 'bad_type_event_time'
+          WHEN emitted_at IS NULL THEN 'bad_type_emitted_at'
+          WHEN schema_version IS NULL THEN 'bad_type_schema_version'
+          WHEN sequence IS NULL THEN 'bad_type_sequence'
+          WHEN schema_version NOT IN (1, 2) THEN 'unknown_schema_version'
+          WHEN event_type NOT IN ('merchant_deleted', 'merchant_upserted') THEN 'unknown_event_type'
           WHEN COALESCE(op, '') NOT IN ('upsert', 'delete') THEN 'bad_op'
           WHEN merchant_id IS NULL THEN 'missing_payload_merchant_id'
           WHEN op = 'upsert' AND name IS NULL THEN 'missing_payload_name'
@@ -154,7 +174,7 @@ BEGIN
     QUALIFY ROW_NUMBER() OVER (PARTITION BY merchant_id ORDER BY sequence DESC) = 1
   ) s
   ON t.merchant_id = s.merchant_id
-  WHEN MATCHED AND s.sequence > t.last_sequence THEN UPDATE SET
+  WHEN MATCHED AND (t.last_sequence IS DISTINCT FROM s.sequence OR t.is_deleted IS DISTINCT FROM s.is_deleted OR t.name IS DISTINCT FROM s.name OR t.country IS DISTINCT FROM s.country OR t.vertical IS DISTINCT FROM s.vertical OR t.risk_status IS DISTINCT FROM s.risk_status) THEN UPDATE SET
       name = s.name,
       country = s.country,
       vertical = s.vertical,
@@ -255,17 +275,21 @@ BEGIN
   INSERT INTO {db}.QUARANTINE.rejected_accounts (event_id, entity_id, sequence, reject_reason, raw, source_file, source_row, loaded_at)
   WITH parsed AS (
     SELECT
-      GET_PATH(raw, 'event_id')::STRING AS event_id,
-      GET_PATH(raw, 'op')::STRING AS op,
+      IFF(TYPEOF(GET_PATH(raw, 'event_id')) = 'VARCHAR', GET_PATH(raw, 'event_id')::STRING, NULL) AS event_id,
+      IFF(TYPEOF(GET_PATH(raw, 'event_type')) = 'VARCHAR', GET_PATH(raw, 'event_type')::STRING, NULL) AS event_type,
+      IFF(TYPEOF(GET_PATH(raw, 'entity_id')) = 'VARCHAR', GET_PATH(raw, 'entity_id')::STRING, NULL) AS entity_id,
+      IFF(TYPEOF(GET_PATH(raw, 'op')) = 'VARCHAR', GET_PATH(raw, 'op')::STRING, NULL) AS op,
+      IFF(TYPEOF(GET_PATH(raw, 'schema_version')) = 'INTEGER', GET_PATH(raw, 'schema_version')::NUMBER, NULL) AS schema_version,
       IFF(TYPEOF(GET_PATH(raw, 'sequence')) = 'INTEGER', GET_PATH(raw, 'sequence')::NUMBER, NULL) AS sequence,
-      TRY_TO_TIMESTAMP_NTZ(GET_PATH(raw, 'event_time')::STRING, 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS event_time,
-      GET_PATH(raw, 'payload.account_id')::STRING AS account_id,
-      GET_PATH(raw, 'payload.merchant_id')::STRING AS merchant_id,
-      GET_PATH(raw, 'payload.label')::STRING AS label,
-      GET_PATH(raw, 'payload.currency')::STRING AS currency,
-      GET_PATH(raw, 'payload.fee_plan')::STRING AS fee_plan,
-      GET_PATH(raw, 'payload.payout_schedule')::STRING AS payout_schedule,
-      GET_PATH(raw, 'payload.status')::STRING AS status,
+      TRY_TO_TIMESTAMP_NTZ(IFF(TYPEOF(GET_PATH(raw, 'event_time')) = 'VARCHAR', GET_PATH(raw, 'event_time')::STRING, NULL), 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS event_time,
+      TRY_TO_TIMESTAMP_NTZ(IFF(TYPEOF(GET_PATH(raw, 'emitted_at')) = 'VARCHAR', GET_PATH(raw, 'emitted_at')::STRING, NULL), 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS emitted_at,
+      IFF(TYPEOF(GET_PATH(raw, 'payload.account_id')) = 'VARCHAR', GET_PATH(raw, 'payload.account_id')::STRING, NULL) AS account_id,
+      IFF(TYPEOF(GET_PATH(raw, 'payload.merchant_id')) = 'VARCHAR', GET_PATH(raw, 'payload.merchant_id')::STRING, NULL) AS merchant_id,
+      IFF(TYPEOF(GET_PATH(raw, 'payload.label')) = 'VARCHAR', GET_PATH(raw, 'payload.label')::STRING, NULL) AS label,
+      IFF(TYPEOF(GET_PATH(raw, 'payload.currency')) = 'VARCHAR', GET_PATH(raw, 'payload.currency')::STRING, NULL) AS currency,
+      IFF(TYPEOF(GET_PATH(raw, 'payload.fee_plan')) = 'VARCHAR', GET_PATH(raw, 'payload.fee_plan')::STRING, NULL) AS fee_plan,
+      IFF(TYPEOF(GET_PATH(raw, 'payload.payout_schedule')) = 'VARCHAR', GET_PATH(raw, 'payload.payout_schedule')::STRING, NULL) AS payout_schedule,
+      IFF(TYPEOF(GET_PATH(raw, 'payload.status')) = 'VARCHAR', GET_PATH(raw, 'payload.status')::STRING, NULL) AS status,
       raw,
       source_file,
       source_row,
@@ -276,8 +300,14 @@ BEGIN
     SELECT *,
       CASE
         WHEN event_id IS NULL THEN 'missing_event_id'
-        WHEN sequence IS NULL THEN 'bad_type_sequence'
+        WHEN event_type IS NULL THEN 'missing_event_type'
+        WHEN entity_id IS NULL THEN 'missing_entity_id'
         WHEN event_time IS NULL THEN 'bad_type_event_time'
+        WHEN emitted_at IS NULL THEN 'bad_type_emitted_at'
+        WHEN schema_version IS NULL THEN 'bad_type_schema_version'
+        WHEN sequence IS NULL THEN 'bad_type_sequence'
+        WHEN schema_version NOT IN (1, 2) THEN 'unknown_schema_version'
+        WHEN event_type NOT IN ('account_deleted', 'account_upserted') THEN 'unknown_event_type'
         WHEN COALESCE(op, '') NOT IN ('upsert', 'delete') THEN 'bad_op'
         WHEN account_id IS NULL THEN 'missing_payload_account_id'
         WHEN op = 'upsert' AND merchant_id IS NULL THEN 'missing_payload_merchant_id'
@@ -298,17 +328,21 @@ BEGIN
   USING (
     WITH parsed AS (
       SELECT
-        GET_PATH(raw, 'event_id')::STRING AS event_id,
-        GET_PATH(raw, 'op')::STRING AS op,
+        IFF(TYPEOF(GET_PATH(raw, 'event_id')) = 'VARCHAR', GET_PATH(raw, 'event_id')::STRING, NULL) AS event_id,
+        IFF(TYPEOF(GET_PATH(raw, 'event_type')) = 'VARCHAR', GET_PATH(raw, 'event_type')::STRING, NULL) AS event_type,
+        IFF(TYPEOF(GET_PATH(raw, 'entity_id')) = 'VARCHAR', GET_PATH(raw, 'entity_id')::STRING, NULL) AS entity_id,
+        IFF(TYPEOF(GET_PATH(raw, 'op')) = 'VARCHAR', GET_PATH(raw, 'op')::STRING, NULL) AS op,
+        IFF(TYPEOF(GET_PATH(raw, 'schema_version')) = 'INTEGER', GET_PATH(raw, 'schema_version')::NUMBER, NULL) AS schema_version,
         IFF(TYPEOF(GET_PATH(raw, 'sequence')) = 'INTEGER', GET_PATH(raw, 'sequence')::NUMBER, NULL) AS sequence,
-        TRY_TO_TIMESTAMP_NTZ(GET_PATH(raw, 'event_time')::STRING, 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS event_time,
-        GET_PATH(raw, 'payload.account_id')::STRING AS account_id,
-        GET_PATH(raw, 'payload.merchant_id')::STRING AS merchant_id,
-        GET_PATH(raw, 'payload.label')::STRING AS label,
-        GET_PATH(raw, 'payload.currency')::STRING AS currency,
-        GET_PATH(raw, 'payload.fee_plan')::STRING AS fee_plan,
-        GET_PATH(raw, 'payload.payout_schedule')::STRING AS payout_schedule,
-        GET_PATH(raw, 'payload.status')::STRING AS status,
+        TRY_TO_TIMESTAMP_NTZ(IFF(TYPEOF(GET_PATH(raw, 'event_time')) = 'VARCHAR', GET_PATH(raw, 'event_time')::STRING, NULL), 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS event_time,
+        TRY_TO_TIMESTAMP_NTZ(IFF(TYPEOF(GET_PATH(raw, 'emitted_at')) = 'VARCHAR', GET_PATH(raw, 'emitted_at')::STRING, NULL), 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS emitted_at,
+        IFF(TYPEOF(GET_PATH(raw, 'payload.account_id')) = 'VARCHAR', GET_PATH(raw, 'payload.account_id')::STRING, NULL) AS account_id,
+        IFF(TYPEOF(GET_PATH(raw, 'payload.merchant_id')) = 'VARCHAR', GET_PATH(raw, 'payload.merchant_id')::STRING, NULL) AS merchant_id,
+        IFF(TYPEOF(GET_PATH(raw, 'payload.label')) = 'VARCHAR', GET_PATH(raw, 'payload.label')::STRING, NULL) AS label,
+        IFF(TYPEOF(GET_PATH(raw, 'payload.currency')) = 'VARCHAR', GET_PATH(raw, 'payload.currency')::STRING, NULL) AS currency,
+        IFF(TYPEOF(GET_PATH(raw, 'payload.fee_plan')) = 'VARCHAR', GET_PATH(raw, 'payload.fee_plan')::STRING, NULL) AS fee_plan,
+        IFF(TYPEOF(GET_PATH(raw, 'payload.payout_schedule')) = 'VARCHAR', GET_PATH(raw, 'payload.payout_schedule')::STRING, NULL) AS payout_schedule,
+        IFF(TYPEOF(GET_PATH(raw, 'payload.status')) = 'VARCHAR', GET_PATH(raw, 'payload.status')::STRING, NULL) AS status,
         raw,
         source_file,
         source_row,
@@ -319,8 +353,14 @@ BEGIN
       SELECT *,
         CASE
           WHEN event_id IS NULL THEN 'missing_event_id'
-          WHEN sequence IS NULL THEN 'bad_type_sequence'
+          WHEN event_type IS NULL THEN 'missing_event_type'
+          WHEN entity_id IS NULL THEN 'missing_entity_id'
           WHEN event_time IS NULL THEN 'bad_type_event_time'
+          WHEN emitted_at IS NULL THEN 'bad_type_emitted_at'
+          WHEN schema_version IS NULL THEN 'bad_type_schema_version'
+          WHEN sequence IS NULL THEN 'bad_type_sequence'
+          WHEN schema_version NOT IN (1, 2) THEN 'unknown_schema_version'
+          WHEN event_type NOT IN ('account_deleted', 'account_upserted') THEN 'unknown_event_type'
           WHEN COALESCE(op, '') NOT IN ('upsert', 'delete') THEN 'bad_op'
           WHEN account_id IS NULL THEN 'missing_payload_account_id'
           WHEN op = 'upsert' AND merchant_id IS NULL THEN 'missing_payload_merchant_id'
@@ -350,7 +390,7 @@ BEGIN
     QUALIFY ROW_NUMBER() OVER (PARTITION BY account_id ORDER BY sequence DESC) = 1
   ) s
   ON t.account_id = s.account_id
-  WHEN MATCHED AND s.sequence > t.last_sequence THEN UPDATE SET
+  WHEN MATCHED AND (t.last_sequence IS DISTINCT FROM s.sequence OR t.is_deleted IS DISTINCT FROM s.is_deleted OR t.merchant_id IS DISTINCT FROM s.merchant_id OR t.label IS DISTINCT FROM s.label OR t.currency IS DISTINCT FROM s.currency OR t.fee_plan IS DISTINCT FROM s.fee_plan OR t.payout_schedule IS DISTINCT FROM s.payout_schedule OR t.status IS DISTINCT FROM s.status) THEN UPDATE SET
       merchant_id = s.merchant_id,
       label = s.label,
       currency = s.currency,

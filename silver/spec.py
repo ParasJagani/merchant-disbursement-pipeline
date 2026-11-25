@@ -31,6 +31,10 @@ class ReferenceTable:
     key: str  # merchant_id
     fields: tuple[Field, ...]
 
+    @property
+    def event_types(self) -> tuple[str, ...]:
+        return tuple(sorted(EVENT_TYPES[self.topic]))
+
 
 @dataclass(frozen=True)
 class EventTopic:
