@@ -96,3 +96,9 @@ real account to find.
 - **Dynamic tables still do not block on bad data.** Quarantine is the control, and Phase 6 adds an alert on `reject_summary`.
 - **Lesson from the first Snowflake chaos drill: the same SQL can behave differently on the real engine.** Snowflake's `TRY_TO_TIMESTAMP_NTZ` with `FF3` also accepts a timestamp with no fractional seconds, DuckDB does not, so seven injected messages (one per topic) were accepted. Silver now checks the exact shape (`YYYY-MM-DDTHH:MI:SS.mmmZ`) with a regular expression before parsing, and the catalog gained ten timestamp shapes for `event_time` and `emitted_at` (1 and 6 digit fractions, lower-case `t`, offset, no `Z`, space, date only, impossible date and hour, empty).
 - **A drill that fails must still leave no trace.** Cleanup now also removes rows a wrongly accepted message created in the versions and current tables, and `python -m ops.chaos_drill --cleanup <drill id>` repeats it after an interrupted run.
+- **The dead-letter check is about loss, not arithmetic.** It fails if a refused message is missing or an unexpected one is present, and only warns when the copy counts are uneven (repeated or interrupted stage runs). The first version demanded an exact multiple and failed on harmless clutter.
+
+## Phase 5 first run (trial account)
+
+Gate passed: chaos drill 572 of 572 quarantined with the right reason and a full cleanup; `make quality-verify` has no FAIL; silver and gold checks still pass after the rebuild. Two real-account findings: Snowflake's timestamp parsing is more lenient than DuckDB's (fixed with an explicit shape check), and a half-finished stage run can leave extra dead-letter lines (now a warning).
+
