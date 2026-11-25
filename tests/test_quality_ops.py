@@ -83,6 +83,33 @@ def test_the_chaos_drill_injects_checks_and_cleans_up(pipeline):
     assert any(s.startswith("DELETE FROM DB.BRONZE.") for s in conn.log)
 
 
+def test_cleanup_removes_a_wrongly_accepted_reference_row_completely(pipeline):
+    silver, oracle = pipeline
+    before = chaos_drill.snapshot(StandIn(silver).cursor(), "DB")
+    good = json.dumps(
+        {
+            "event_id": "evt_chaos_1",
+            "event_type": "merchant_upserted",
+            "schema_version": 1,
+            "sequence": 1,
+            "event_time": "2026-01-05T10:00:00.000Z",
+            "emitted_at": "2026-01-05T10:00:00.000Z",
+            "merchant_id": "mch_t",
+            "name": "Template Co",
+            "country": "DE",
+            "vertical": "retail",
+            "risk_status": "low",
+        }
+    )
+    silver.load_bronze("ref_merchants", [(good, "chaos/t9.ndjson", 1)])
+    silver.run_reference()
+    assert chaos_drill.snapshot(StandIn(silver).cursor(), "DB") != before  # it was accepted
+    conn = StandIn(silver)
+    for sql in chaos_drill.cleanup_statements("DB", "t9"):
+        conn.execute(sql)
+    assert chaos_drill.snapshot(conn.cursor(), "DB") == before
+
+
 def test_the_drill_injects_only_messages_that_silver_rejects():
     faults = chaos_drill.injectable()
     assert len(faults) > 300

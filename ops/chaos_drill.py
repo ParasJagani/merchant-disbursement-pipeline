@@ -65,6 +65,16 @@ def cleanup_statements(database: str, drill_id: str) -> list[str]:
         f"DELETE FROM {database}.QUARANTINE.rejected_{t.name} WHERE source_file = '{marker}'"
         for t in REFERENCE_TABLES
     ]
+    # If a bad message was wrongly accepted, the reference track also copied it into the versions
+    # table and built a current row from it. Remove those too, so a failed drill leaves no trace.
+    for t in REFERENCE_TABLES:
+        out.append(
+            f"DELETE FROM {database}.SILVER.silver_{t.name}_versions WHERE source_file = '{marker}'"
+        )
+        out.append(
+            f"DELETE FROM {database}.SILVER.silver_{t.name} WHERE {t.key} NOT IN "
+            f"(SELECT {t.key} FROM {database}.SILVER.silver_{t.name}_versions)"
+        )
     return out
 
 
@@ -113,6 +123,7 @@ def rejects_by_reason(cursor, database: str, drill_id: str) -> Counter:
 
 def run(connection, database: str, oracle: list[dict], drill_id: str | None = None) -> list[dict]:
     drill_id = drill_id or time.strftime("%Y%m%d-%H%M%S")
+    print(f"drill id {drill_id} (if it is interrupted: --cleanup {drill_id})")
     faults = injectable()
     expected = expected_rejects(faults)
     cursor = connection.cursor()
@@ -153,11 +164,15 @@ def run(connection, database: str, oracle: list[dict], drill_id: str | None = No
                 if expected[k] != found[k]
             )
             record("each one has the expected reason", 0, len(wrong))
+            for key, want, got in wrong[:10]:
+                print(f"  reason mismatch {key}: expected {want}, found {got}")
             during = snapshot(cursor, database)
             changed = [
                 t for t in SILVER_TABLES if t.startswith("SILVER.") and before[t] != during[t]
             ]
             record("no silver table changed", 0, len(changed))
+            for t in changed:
+                print(f"  changed: {t} {before[t]} -> {during[t]}")
             record("during: silver ledger still equals the oracle", 0,
                    ledger_differences(cursor, database, oracle))  # fmt: skip
             record("during: nothing unaccounted", 0, unaccounted(cursor, database))
@@ -178,6 +193,11 @@ def run(connection, database: str, oracle: list[dict], drill_id: str | None = No
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="python -m ops.chaos_drill")
     parser.add_argument("--run", action="store_true", help="really inject (default is a plan)")
+    parser.add_argument(
+        "--cleanup",
+        metavar="DRILL_ID",
+        help="remove what an earlier, interrupted drill left behind, e.g. 20261118-101500",
+    )
     parser.add_argument("--golden", type=Path, default=Path("data/golden"))
     parser.add_argument(
         "--database", default=os.environ.get("SNOWFLAKE_DATABASE", "MERCHANT_DISBURSEMENT")
@@ -185,6 +205,20 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     faults = injectable()
     expected = expected_rejects(faults)
+    if args.cleanup:
+        from .connection import connect
+
+        conn = connect(warehouse=os.environ.get("SNOWFLAKE_TRANSFORM_WAREHOUSE", "TRANSFORM_WH"))
+        try:
+            cursor = conn.cursor()
+            for sql in cleanup_statements(args.database, args.cleanup):
+                cursor.execute(sql)
+            for sql in refresh_statements(args.database):
+                cursor.execute(sql)
+        finally:
+            conn.close()
+        print(f"removed everything drill {args.cleanup} left behind")
+        return 0
     if not args.run:
         print(f"Would inject {len(faults)} bad messages across {len(expected)} topic/reason pairs.")
         for (topic, reason), n in sorted(expected.items()):
