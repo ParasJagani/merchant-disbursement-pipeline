@@ -34,7 +34,7 @@ Silver is at least as strict as the file writer, so a message that slips past th
 
 Two choices worth knowing. An optional field with the wrong type is treated as absent, not rejected. And unusual but valid messages are accepted on purpose: an unknown extra field, schema version 2, a fee of 0, a negative adjustment, an amount above 32 bits.
 
-The full list is `silver/faults.py`: about 430 messages, each with the exact reason it must get.
+The full list is `silver/faults.py`: 491 messages, each with the exact reason it must get (the 432 that must be rejected are the ones the drill injects).
 
 ## How it is tested (no Snowflake needed)
 
@@ -59,7 +59,7 @@ make silver-verify                   # Phase 3 gate again: counts and the ledger
 make gold                            # dbt build: gold still equals the oracle
 make quality-verify                  # the Phase 5 gate (below)
 make chaos-plan                      # shows what the drill would inject
-make chaos-drill                     # injects ~430 bad messages, checks, cleans up
+make chaos-drill                     # injects 432 bad messages, checks, cleans up
 make demo-down                       # always, last
 ```
 
