@@ -104,10 +104,13 @@ def _rejected_deliveries(golden_dir: Path, topic: str) -> Counter:
 
 
 def check_dead_letters(golden_dir: Path, dlq_dir: Path) -> list[dict]:
-    """Every refused message is in the dead letters, as many times as the stage was run.
+    """Every refused message is in the dead letters, and nothing else is.
 
-    Staging twice appends the same dead letters again, so each message may appear k times, for
-    the same k. Identical messages (such as ``[1,2,3]``) are counted, not collapsed.
+    The loss check is: each refused message appears at least as many times as it was delivered,
+    and no other message appears. ``make stage`` appends again on every run, and a run that
+    stopped part-way leaves a few extra lines, so the totals are not always a clean multiple. An
+    uneven count is reported as a warning (it is clutter, not loss). Identical messages (such as
+    ``[1,2,3]``) are counted, not collapsed.
     """
     if not dlq_dir.exists():
         return [result("dead letters on disk", "n/a", "no folder", True, WARN,
@@ -119,18 +122,22 @@ def check_dead_letters(golden_dir: Path, dlq_dir: Path) -> list[dict]:
         actual: Counter = Counter()
         if path.exists():
             actual = Counter(json.loads(x)["value"] for x in path.read_text().splitlines() if x)
-        total = sum(expected.values())
-        runs = {actual[v] // expected[v] for v in expected if expected[v]} or {0}
-        ok = (
-            actual.keys() == expected.keys()
-            and len(runs) == 1
-            and runs != {0}
-            and all(actual[v] == expected[v] * next(iter(runs)) for v in expected)
-        ) or (not expected and not actual)
-        detail = "" if ok else f"{sum(actual.values())} lines, {len(actual)} distinct messages"
-        out.append(result(f"{topic}: dead letters match the rejected deliveries", total,
-                          sum(actual.values()) // max(next(iter(runs)), 1), ok,
-                          detail=detail))  # fmt: skip
+        missing = sum(1 for v in expected if actual[v] < expected[v])
+        unexpected = sum(1 for v in actual if v not in expected)
+        ok = missing == 0 and unexpected == 0
+        detail = ""
+        if not ok:
+            detail = f"{missing} refused messages missing or short, {unexpected} unexpected"
+        name = f"{topic}: dead letters match the rejected deliveries"
+        out.append(result(name, sum(expected.values()), sum(min(actual[v], n)
+                          for v, n in expected.items()), ok, detail=detail))  # fmt: skip
+        copies = {actual[v] / n for v, n in expected.items() if n}
+        if ok and len(copies) > 1:
+            out.append(result(f"{topic}: dead letter file has the same number of copies", "even",
+                              "uneven", False, WARN,
+                              f"{sum(actual.values())} lines for {sum(expected.values())} per "
+                              "stage run: a stage run probably stopped part-way. No message is "
+                              "missing, so this is clutter, not loss"))  # fmt: skip
     return out
 
 
