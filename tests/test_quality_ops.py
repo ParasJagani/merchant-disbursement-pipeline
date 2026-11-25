@@ -218,22 +218,56 @@ def test_reconciliation_failure_is_a_failure():
     assert [r["name"] for r in results if not r["ok"]] == ["payments.fees: unaccounted_rows"]
 
 
-def test_dead_letters_are_counted_by_distinct_message(tmp_path):
+def _golden_with_poison(tmp_path):
+    """A tiny golden folder: per topic, one valid line and three refused ones (two identical)."""
+    from generator.config import TOPICS
+    from silver.faults import TEMPLATES
+
+    golden = tmp_path / "golden"
+    for topic in TOPICS:
+        (golden / topic).mkdir(parents=True)
+        good = json.dumps(TEMPLATES[topic])
+        lines = [good, "[1,2,3]", "[1,2,3]", good[:30]]
+        (golden / topic / "2026-01-01.ndjson").write_text("\n".join(lines) + "\n")
+    return golden
+
+
+def _write_dead_letters(dlq, topics, times=1, drop=None):
+    dlq.mkdir(exist_ok=True)
+    for topic in topics:
+        rows = [
+            "[1,2,3]",
+            "[1,2,3]",
+            json.dumps(__import__("silver.faults").faults.TEMPLATES[topic])[:30],
+        ]
+        if topic == drop:
+            rows = rows[:2]
+        lines = [json.dumps({"reason": "x", "key": None, "value": v}) for v in rows * times]
+        (dlq / f"{topic}.ndjson").write_text("\n".join(lines) + "\n")
+
+
+def test_dead_letters_must_match_the_refused_deliveries_even_when_staged_twice(tmp_path):
     from generator.config import TOPICS
 
-    manifest = {
-        "delivered_messages_by_topic": {t: 12 for t in TOPICS},
-        "valid_messages_by_topic": {t: 10 for t in TOPICS},
-    }
-    for t in TOPICS:
-        lines = [json.dumps({"reason": "x", "key": None, "value": f"v{i}"}) for i in (1, 2, 1, 2)]
-        (tmp_path / f"{t}.ndjson").write_text("\n".join(lines) + "\n")  # staged twice
-    assert all(r["ok"] for r in verify_quality.check_dead_letters(manifest, tmp_path))
-    (tmp_path / f"{TOPICS[0]}.ndjson").write_text("")
-    assert [not r["ok"] for r in verify_quality.check_dead_letters(manifest, tmp_path)].count(
-        True
-    ) == 1
-    missing = verify_quality.check_dead_letters(manifest, tmp_path / "nope")
+    golden = _golden_with_poison(tmp_path)
+    for times in (1, 2, 3):  # `make stage` appends again on every run
+        _write_dead_letters(tmp_path / "dlq", TOPICS, times=times)
+        results = verify_quality.check_dead_letters(golden, tmp_path / "dlq")
+        assert all(r["ok"] for r in results), results
+        assert all(r["expected"] == 3 and r["actual"] == 3 for r in results)
+
+
+def test_a_missing_dead_letter_is_reported(tmp_path):
+    from generator.config import TOPICS
+
+    golden = _golden_with_poison(tmp_path)
+    _write_dead_letters(tmp_path / "dlq", TOPICS, times=2, drop=TOPICS[3])
+    bad = [r for r in verify_quality.check_dead_letters(golden, tmp_path / "dlq") if not r["ok"]]
+    assert [r["name"].split(":")[0] for r in bad] == [TOPICS[3]]
+
+
+def test_a_folder_that_is_not_there_is_a_warning_not_a_failure(tmp_path):
+    missing = verify_quality.check_dead_letters(tmp_path, tmp_path / "nope")
     assert missing[0]["severity"] == "warn"
 
 

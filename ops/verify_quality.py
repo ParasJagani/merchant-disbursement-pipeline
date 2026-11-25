@@ -18,10 +18,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from collections import Counter
 from pathlib import Path
 
 from file_writer.naming import topic_path
 from generator.config import TOPICS
+from generator.schema import validate_message
 
 FAIL, WARN = "fail", "warn"
 
@@ -91,23 +93,44 @@ def check_loads(connection, database: str, days: int = 14) -> list[dict]:
     return out
 
 
-def check_dead_letters(manifest: dict, dlq_dir: Path) -> list[dict]:
+def _rejected_deliveries(golden_dir: Path, topic: str) -> Counter:
+    """The messages the writer must have refused: golden lines that fail validation."""
+    found: Counter = Counter()
+    for path in sorted((golden_dir / topic).glob("*.ndjson")):
+        for line in path.read_text().splitlines():
+            if line and not validate_message(topic, line)[0]:
+                found[line] += 1
+    return found
+
+
+def check_dead_letters(golden_dir: Path, dlq_dir: Path) -> list[dict]:
+    """Every refused message is in the dead letters, as many times as the stage was run.
+
+    Staging twice appends the same dead letters again, so each message may appear k times, for
+    the same k. Identical messages (such as ``[1,2,3]``) are counted, not collapsed.
+    """
     if not dlq_dir.exists():
         return [result("dead letters on disk", "n/a", "no folder", True, WARN,
                        f"{dlq_dir} not found; skipped")]  # fmt: skip
     out = []
     for topic in TOPICS:
-        should = (
-            manifest["delivered_messages_by_topic"][topic]
-            - manifest["valid_messages_by_topic"][topic]
-        )
+        expected = _rejected_deliveries(golden_dir, topic)
         path = dlq_dir / f"{topic}.ndjson"
-        values = set()
+        actual: Counter = Counter()
         if path.exists():
-            values = {json.loads(line)["value"] for line in path.read_text().splitlines() if line}
-        # Staging twice appends the same dead letters again, so count distinct messages.
-        out.append(result(f"{topic}: dead letters equal rejected deliveries", should, len(values),
-                          len(values) == should))  # fmt: skip
+            actual = Counter(json.loads(x)["value"] for x in path.read_text().splitlines() if x)
+        total = sum(expected.values())
+        runs = {actual[v] // expected[v] for v in expected if expected[v]} or {0}
+        ok = (
+            actual.keys() == expected.keys()
+            and len(runs) == 1
+            and runs != {0}
+            and all(actual[v] == expected[v] * next(iter(runs)) for v in expected)
+        ) or (not expected and not actual)
+        detail = "" if ok else f"{sum(actual.values())} lines, {len(actual)} distinct messages"
+        out.append(result(f"{topic}: dead letters match the rejected deliveries", total,
+                          sum(actual.values()) // max(next(iter(runs)), 1), ok,
+                          detail=detail))  # fmt: skip
     return out
 
 
@@ -139,7 +162,7 @@ def check_failures(connection, database: str, days: int = 1) -> list[dict]:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="python -m ops.verify_quality")
-    parser.add_argument("--manifest", type=Path, default=Path("data/golden/manifest.json"))
+    parser.add_argument("--golden", type=Path, default=Path("data/golden"))
     parser.add_argument("--dlq", type=Path, default=Path("data/dlq"))
     parser.add_argument(
         "--database", default=os.environ.get("SNOWFLAKE_DATABASE", "MERCHANT_DISBURSEMENT")
@@ -147,12 +170,11 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     from .connection import connect
 
-    manifest = json.loads(args.manifest.read_text())
     conn = connect(warehouse=os.environ.get("SNOWFLAKE_TRANSFORM_WAREHOUSE", "TRANSFORM_WH"))
     try:
         results = check_reconciliation(conn, args.database)
         results += check_loads(conn, args.database)
-        results += check_dead_letters(manifest, args.dlq)
+        results += check_dead_letters(args.golden, args.dlq)
         results += check_failures(conn, args.database)
         summary = _rows(
             conn, f"SELECT * FROM {args.database}.QUARANTINE.reject_summary ORDER BY 1, 2"
