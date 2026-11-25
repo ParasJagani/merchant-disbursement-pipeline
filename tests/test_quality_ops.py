@@ -284,6 +284,32 @@ def test_dead_letters_must_match_the_refused_deliveries_even_when_staged_twice(t
         assert all(r["expected"] == 3 and r["actual"] == 3 for r in results)
 
 
+def test_a_stage_run_that_stopped_part_way_is_a_warning_not_a_failure(tmp_path):
+    from generator.config import TOPICS
+
+    golden = _golden_with_poison(tmp_path)
+    _write_dead_letters(tmp_path / "dlq", TOPICS, times=2)
+    path = tmp_path / "dlq" / f"{TOPICS[0]}.ndjson"
+    first = path.read_text().splitlines()[0]
+    path.write_text(path.read_text() + first + "\n")  # one extra copy from an interrupted run
+    results = verify_quality.check_dead_letters(golden, tmp_path / "dlq")
+    hard = [r for r in results if not r["ok"] and r["severity"] == "fail"]
+    soft = [r for r in results if not r["ok"] and r["severity"] == "warn"]
+    assert not hard
+    assert [r["name"].split(":")[0] for r in soft] == [TOPICS[0]]
+
+
+def test_an_unexpected_dead_letter_is_a_failure(tmp_path):
+    from generator.config import TOPICS
+
+    golden = _golden_with_poison(tmp_path)
+    _write_dead_letters(tmp_path / "dlq", TOPICS, times=1)
+    path = tmp_path / "dlq" / f"{TOPICS[2]}.ndjson"
+    path.write_text(path.read_text() + json.dumps({"reason": "x", "value": "{}"}) + "\n")
+    bad = [r for r in verify_quality.check_dead_letters(golden, tmp_path / "dlq") if not r["ok"]]
+    assert [r["name"].split(":")[0] for r in bad] == [TOPICS[2]]
+
+
 def test_a_missing_dead_letter_is_reported(tmp_path):
     from generator.config import TOPICS
 

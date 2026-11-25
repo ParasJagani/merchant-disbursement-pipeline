@@ -63,7 +63,7 @@ make chaos-drill                     # injects 572 bad messages, checks, cleans 
 make demo-down                       # always, last
 ```
 
-`make quality-verify` should show `PASS` on every line: no unaccounted rows, no missing entities, every staged file loaded, no failed loads, and (if `data/dlq` is on your machine) dead letters equal to the messages the writer should have rejected. Failed task runs and dynamic table refreshes in the last day are shown as `WARN`, not `FAIL`, because earlier setup mistakes would otherwise fail the gate forever.
+`make quality-verify` should show `PASS` on every line: no unaccounted rows, no missing entities, every staged file loaded, no failed loads, and (if `data/dlq` is on your machine) every message the writer should have rejected is in the dead letters, and nothing else is there. Failed task runs and dynamic table refreshes in the last day are shown as `WARN`, not `FAIL`, because earlier setup mistakes would otherwise fail the gate forever.
 
 `make chaos-drill` should end with every line `PASS`. It stops without injecting anything if the pipeline is not clean to begin with.
 
@@ -74,7 +74,8 @@ make demo-down                       # always, last
 | `make deploy` fails creating a view in `50_quality.sql` | Paste the message; the fix is a small change to the generator |
 | `silver-refresh` says a dynamic table is suspended | Run `make demo-up` first |
 | `quality-verify`: staged files never loaded | A file was staged but the load task has not run, or `ON_ERROR = SKIP_FILE` skipped it. The detail names the files; check `COPY_HISTORY` |
-| `quality-verify`: dead letters do not equal | `data/dlq` is from a different dataset than `data/golden`, or a stage ran with different data |
+| `quality-verify`: dead letters do not match (FAIL) | A refused message is missing, or `data/dlq` holds a message that `data/golden` does not: it is from a different dataset |
+| `quality-verify`: dead letter file has the same number of copies (WARN) | Each `make stage` appends the dead letters again, and a run that stopped part-way leaves a few extra lines. Nothing is missing; it is clutter |
 | `chaos-drill`: "before" checks fail | Silver is not populated or not refreshed; run `make silver-refresh` |
 | `chaos-drill` interrupted | The drill cleans up in a `finally` block. If your terminal died mid-run, run `python -m ops.chaos_drill --cleanup <drill id>` (the id is printed at the start of every run, and is the name of the `chaos/<id>.ndjson` source file) |
 
