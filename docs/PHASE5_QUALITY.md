@@ -84,3 +84,11 @@ make demo-down                       # always, last
 - **Replaying data is safe.** A file staged again under the same name loads zero rows (`COPY INTO` remembers). Under a new name it loads, and silver counts the extra copies as duplicates; the totals do not change.
 - **Changing a rule** is a rebuild from bronze: `python -m ops.reset_silver --yes`, `make deploy`, `make demo-up`, `make silver-refresh`. Because bronze keeps every raw message, nothing needs to be re-sent.
 - **Fixing a dead letter**: dead letters keep the original text and the reason, so after a fix they can be restaged.
+
+## Phase 5 first run (trial account)
+
+Gate passed after two fixes the real account asked for.
+
+- `make chaos-drill`: 572 of 572 injected messages quarantined with the expected reason, no silver table changed, the ledger still equalled the oracle during the drill, and cleanup restored every table. The first attempt failed because Snowflake accepts a timestamp with no milliseconds (DuckDB does not), so seven messages were accepted. Silver now checks the exact timestamp shape.
+- `make quality-verify`: every reconciliation, load and dead-letter check passed (148 staged files, none skipped or failed; `unaccounted_rows` and `missing_entities` are 0 for all seven topics). One `WARN` remains for the fees dead-letter file (167 lines for 81 per run) from an earlier stage run that stopped part-way; no message is missing.
+- `make silver-verify` (33 checks) and `make gold` (21 of 21) still pass on the rebuilt silver.
