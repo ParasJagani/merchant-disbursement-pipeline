@@ -10,7 +10,10 @@ What is emulated, and how:
 * streams                  -> a table refilled with the bronze rows not yet consumed
 * stored procedures        -> the statements between BEGIN TRANSACTION and COMMIT, run in one
                               transaction; the stream offset advances only if they all succeed
-* tasks                    -> ignored; ``run_reference()`` plays the task
+* tasks and alerts         -> ignored; ``run_reference()`` plays the task and ``call()`` plays
+                              an alert's action
+* INFORMATION_SCHEMA history functions and SYSTEM$SEND_EMAIL -> skipped (Snowflake only); tests
+                              write ``OPS.platform_signals`` to stand in for the history functions
 * GET_PATH / TYPEOF / TRY_TO_TIMESTAMP_NTZ / IFF -> DuckDB JSON functions and macros
 
 What is NOT proven here: that Snowflake accepts each statement, that dynamic tables refresh
@@ -33,7 +36,12 @@ from ops.deploy import SQL_DIR, split_statements
 from .check import LEDGER_SQL, oracle_from_rows
 from .spec import EVENT_TOPICS, REFERENCE_TABLES
 
-SILVER_FILES = ("30_silver_reference.sql", "40_silver_events.sql", "50_quality.sql")
+SILVER_FILES = (
+    "30_silver_reference.sql",
+    "40_silver_events.sql",
+    "50_quality.sql",
+    "60_monitoring.sql",
+)
 SCHEMAS = ("BRONZE", "SILVER", "QUARANTINE", "OPS")
 BRONZE_DDL = (
     "CREATE TABLE IF NOT EXISTS BRONZE.{name} "
@@ -43,6 +51,9 @@ MACROS = (
     "CREATE OR REPLACE MACRO iff(c, a, b) AS CASE WHEN c THEN a ELSE b END",
     # Snowflake's REGEXP_LIKE must match the whole string; DuckDB's regexp_matches does not.
     "CREATE OR REPLACE MACRO regexp_like(s, p) AS regexp_full_match(s, p)",
+    "CREATE OR REPLACE MACRO uuid_string() AS CAST(uuid() AS VARCHAR)",
+    # Only minutes are used by the monitoring SQL, so the unit argument is ignored here.
+    "CREATE OR REPLACE MACRO dateadd(unit, n, t) AS t + to_minutes(CAST(n AS BIGINT))",
     # Snowflake's format string is ignored; the generated SQL always uses the same ISO format.
     "CREATE OR REPLACE MACRO try_to_timestamp_ntz(x, fmt) AS "
     "TRY_STRPTIME(x, '%Y-%m-%dT%H:%M:%S.%gZ')",
@@ -59,6 +70,9 @@ _DYNAMIC = re.compile(r"CREATE DYNAMIC TABLE (?:IF NOT EXISTS )?(\S+)\s.*?\nAS\n
 _STREAM = re.compile(r"CREATE STREAM IF NOT EXISTS (\S+) ON TABLE (\S+)")
 _PROC = re.compile(r"CREATE OR REPLACE PROCEDURE (\S+?)\(\)")
 _BODY = re.compile(r"\$\$\s*BEGIN(.*?)\n\s*EXCEPTION", re.DOTALL)
+_SNOWFLAKE_ONLY = re.compile(
+    r"INFORMATION_SCHEMA|SEND_ALERT_EMAILS|DELETE FROM \S*platform_signals"
+)
 _CONTROL = re.compile(r"^\s*(BEGIN TRANSACTION|COMMIT|RETURN\b.*)\s*$", re.IGNORECASE)
 
 
@@ -94,6 +108,7 @@ class LocalSilver:
 
     def __init__(self, path: str = ":memory:") -> None:
         self.con = duckdb.connect(path)
+        self.con.execute("SET TimeZone = 'UTC'")  # the fake clock below is naive UTC
         for schema in SCHEMAS:
             self.con.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
         for macro in MACROS:
@@ -115,13 +130,16 @@ class LocalSilver:
 
     def _apply(self, statement: str) -> int:
         head = statement.lstrip().upper()
-        if head.startswith("CREATE OR REPLACE TASK"):
+        if head.startswith(("CREATE OR REPLACE TASK", "CREATE OR REPLACE ALERT")):
             return 1
         if head.startswith("CREATE OR REPLACE PROCEDURE"):
             name = _PROC.search(statement)[1].replace("{db}.", "").upper()
+            if name.endswith("SEND_ALERT_EMAILS"):
+                self.procedures[name] = []  # needs SYSTEM$SEND_EMAIL: Snowflake only
+                return 1
             body = _BODY.search(statement)[1]
             lines = [s for s in split_statements(body) if not _CONTROL.match(s)]
-            self.procedures[name] = [translate(s) for s in lines]
+            self.procedures[name] = [translate(s) for s in lines if not _SNOWFLAKE_ONLY.search(s)]
             return 1
         stream = _STREAM.search(statement)
         if stream:
@@ -200,6 +218,17 @@ class LocalSilver:
             raise
         self.consumed[stream] = total  # the offset moves only after the commit
         return "ok"
+
+    def call(self, proc: str) -> None:
+        """Run a plain procedure (no stream) in one transaction, like the alert's action does."""
+        self.con.execute("BEGIN TRANSACTION")
+        try:
+            for statement in self.procedures[proc.upper()]:
+                self.con.execute(statement)
+            self.con.execute("COMMIT")
+        except Exception:
+            self.con.execute("ROLLBACK")
+            raise
 
     def close(self) -> None:
         self.con.close()
