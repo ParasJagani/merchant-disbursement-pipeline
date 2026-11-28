@@ -9,6 +9,12 @@
 GRANT ROLE TRANSFORMER TO ROLE ACCOUNTADMIN;
 GRANT ROLE REPORTER TO ROLE ACCOUNTADMIN;
 
+-- A login also gets the privileges of every other role granted to the user ("secondary roles").
+-- Switch that off for the service user, or a connection running as REPORTER would still hold the
+-- admin's rights and the roles below would limit nothing. (ops/connection.py does the same per
+-- session; this covers clients that do not, such as dbt.)
+ALTER USER IF EXISTS TF_SERVICE_USER SET DEFAULT_SECONDARY_ROLES = ();
+
 -- ---- TRANSFORMER: read silver, own gold -----------------------------------------------------
 GRANT USAGE ON SCHEMA {db}.SILVER TO ROLE TRANSFORMER;
 GRANT SELECT ON ALL TABLES IN SCHEMA {db}.SILVER TO ROLE TRANSFORMER;

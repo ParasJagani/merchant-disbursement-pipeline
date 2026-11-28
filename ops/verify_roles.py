@@ -10,6 +10,7 @@ a privilege problem, so a typo cannot pass as "denied".
 from __future__ import annotations
 
 import argparse
+import json
 import os
 
 DENIED = ("insufficient privileges", "not authorized", "does not exist")
@@ -136,7 +137,7 @@ def check(connect_as, database: str) -> list[dict]:
             if role not in connections:
                 connections[role] = connect_as(role)
             conn = connections[role]
-            if not any(r["name"].startswith(f"{role}: is running") for r in results):
+            if not any(r["name"] == f"{role}: is running as that role" for r in results):
                 cursor = conn.cursor()
                 try:
                     cursor.execute("SELECT CURRENT_ROLE()")
@@ -146,6 +147,16 @@ def check(connect_as, database: str) -> list[dict]:
                 results.append(
                     {"name": f"{role}: is running as that role", "expected": role,
                      "actual": actual, "ok": actual.upper() == role}
+                )  # fmt: skip
+                cursor = conn.cursor()
+                try:
+                    cursor.execute("SELECT CURRENT_SECONDARY_ROLES()")
+                    extra = json.loads(str(cursor.fetchone()[0])).get("roles", "")
+                finally:
+                    cursor.close()
+                results.append(
+                    {"name": f"{role}: has no secondary roles", "expected": "none",
+                     "actual": extra or "none", "ok": not extra}
                 )  # fmt: skip
             error = _run(conn, [s.replace("{db}", database) for s in statements])
             if must_work:
