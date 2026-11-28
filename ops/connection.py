@@ -24,10 +24,19 @@ def connect(
         serialization.PrivateFormat.PKCS8,
         serialization.NoEncryption(),
     )
-    return snowflake.connector.connect(
+    conn = snowflake.connector.connect(
         account=f"{os.environ['SNOWFLAKE_ORGANIZATION']}-{os.environ['SNOWFLAKE_ACCOUNT']}",
         user=os.environ.get(user_env, default_user),
         private_key=der,
         role=os.environ.get(role_env, default_role),
         warehouse=warehouse or os.environ.get("SNOWFLAKE_INGEST_WAREHOUSE", "INGEST_WH"),
     )
+    # A session also gets the privileges of every other role granted to the user ("secondary
+    # roles") unless told otherwise. Without this, a connection that says it is REPORTER could
+    # still do whatever the admin role can, and the role would limit nothing.
+    cursor = conn.cursor()
+    try:
+        cursor.execute("USE SECONDARY ROLES NONE")
+    finally:
+        cursor.close()
+    return conn

@@ -12,13 +12,17 @@ ROOT = Path(__file__).resolve().parents[1]
 class RoleCursor:
     """Stands in for Snowflake: ``allowed`` says which (role, text) the role may run."""
 
-    def __init__(self, role, rules, log):
+    def __init__(self, role, rules, log, secondary=lambda: '{"roles":"","value":""}'):
         self.role, self.rules, self.log, self.row = role, rules, log, None
+        self.secondary = secondary
 
     def execute(self, sql):
         self.log.append((self.role, sql))
         if sql == "SELECT CURRENT_ROLE()":
             self.row = (self.role,)
+            return
+        if sql == "SELECT CURRENT_SECONDARY_ROLES()":
+            self.row = (self.secondary(),)
             return
         verdict = self.rules(self.role, sql)
         if verdict != "ok":
@@ -72,7 +76,7 @@ def well_behaved(role, sql):
 def test_a_correctly_granted_pair_of_roles_passes_every_probe():
     results, _, conns = run(well_behaved)
     assert all(r["ok"] for r in results), [r for r in results if not r["ok"]]
-    assert len(results) == len(PROBES) + 2  # plus "is running as that role", once per role
+    assert len(results) == len(PROBES) + 4  # plus "running as" and "no secondary roles", per role
     assert all(c.closed for c in conns)
 
 
@@ -80,6 +84,30 @@ def test_each_role_connects_once_and_probes_run_as_the_right_role():
     _, log, conns = run(well_behaved)
     assert sorted(c.role for c in conns) == ["REPORTER", "TRANSFORMER"]
     assert {role for role, _ in log} == {"REPORTER", "TRANSFORMER"}
+
+
+def test_a_session_that_keeps_secondary_roles_fails_the_gate():
+    log, conns = [], []
+
+    def connect_as(role):
+        class Leaky(RoleConn):
+            def cursor(self):
+                return RoleCursor(
+                    self.role, self.rules, self.log, lambda: '{"roles":"ACCOUNTADMIN","value":"x"}'
+                )
+
+        conns.append(Leaky(role, well_behaved, log))
+        return conns[-1]
+
+    results = check(connect_as, "DB")
+    failed = [r["name"] for r in results if not r["ok"]]
+    assert failed == ["TRANSFORMER: has no secondary roles", "REPORTER: has no secondary roles"]
+
+
+def test_every_connection_turns_secondary_roles_off():
+    text = (ROOT / "ops" / "connection.py").read_text()
+    assert "USE SECONDARY ROLES NONE" in text
+    assert any("DEFAULT_SECONDARY_ROLES = ()" in g for g in grants())
 
 
 def test_a_role_with_too_much_access_fails_the_refusal_probe():
@@ -129,12 +157,14 @@ def test_grants_are_deployed_last_and_every_statement_is_a_grant():
     from ops.deploy import sql_files
 
     assert sql_files()[-1].name == "70_grants.sql"
-    assert grants() and all(g.upper().startswith("GRANT ") for g in grants())
+    assert grants() and all(
+        g.upper().startswith(("GRANT ", "ALTER USER IF EXISTS ")) for g in grants()
+    )
 
 
 def test_the_reporter_is_never_given_more_than_select_and_usage():
     for g in grants():
-        if g.endswith("TO ROLE REPORTER"):
+        if g.startswith("GRANT") and g.endswith("TO ROLE REPORTER"):
             privilege = g.split(" ON ")[0].removeprefix("GRANT ")
             assert privilege in {"USAGE", "SELECT"}, g
 

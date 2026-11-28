@@ -74,7 +74,9 @@ def test_every_statement_is_safe_to_repeat():
         for s in render(path, "DB"):
             head = s.lstrip().upper()
             assert (
-                head.startswith(("USE ", "GRANT ", "ALTER STAGE "))  # ALTER ... SET is repeatable
+                head.startswith(
+                    ("USE ", "GRANT ", "ALTER STAGE ", "ALTER USER IF EXISTS ")
+                )  # ALTER ... SET is repeatable
                 or " IF NOT EXISTS " in head[:80]
                 or head.startswith("CREATE OR REPLACE ")
                 # a seed that adds only the rows that are missing
