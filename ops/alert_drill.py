@@ -47,17 +47,24 @@ def open_incidents(cursor, database: str, signal: str | None = None) -> list[tup
     )
 
 
-def last_run(cursor, database: str) -> tuple[str, str]:
-    """State and error of the newest run of the alert, from its history."""
+def last_run(cursor, database: str) -> tuple[str, str, str]:
+    """State and error of the newest finished run of the alert, and every recent state seen.
+
+    The history is written a little after the run, so the drill polls this rather than reading it
+    once. The third value helps to see what the history held when the state is still ``none``.
+    """
     rows = _all(
         cursor,
         "SELECT state, COALESCE(sql_error_message, '') FROM TABLE("
         f"{database}.INFORMATION_SCHEMA.ALERT_HISTORY("
-        "SCHEDULED_TIME_RANGE_START => DATEADD('hour', -1, CURRENT_TIMESTAMP()), "
-        "RESULT_LIMIT => 20, ALERT_NAME => 'HEALTH_ALERT')) "
-        "WHERE state NOT IN ('SCHEDULED', 'EXECUTING') ORDER BY scheduled_time DESC LIMIT 1",
+        "SCHEDULED_TIME_RANGE_START => DATEADD('hour', -2, CURRENT_TIMESTAMP()), "
+        "RESULT_LIMIT => 20, ALERT_NAME => 'HEALTH_ALERT')) ORDER BY scheduled_time DESC",
     )
-    return (str(rows[0][0]), str(rows[0][1])) if rows else ("none", "")
+    seen = ",".join(str(r[0]) for r in rows[:6])
+    for state, error in rows:
+        if str(state) not in ("SCHEDULED", "EXECUTING"):
+            return str(state), str(error), seen
+    return "none", "", seen
 
 
 def wait_for(check, timeout: float, pause: float = 3.0):
@@ -127,8 +134,10 @@ def run(connection, database: str, timeout: float = 90.0, pause: float = 3.0) ->
             others = [i for i in open_incidents(cursor, database) if i[0] != SIGNAL]
             record("nothing else fired (the rejects are accounted for)", 0, len(others),
                    detail=str(others[:3]))  # fmt: skip
-            state, error = last_run(cursor, database)
-            record("the alert ran and its action succeeded", "TRIGGERED", state, detail=error[:200])
+            wait_for(lambda: last_run(cursor, database)[0] != "none", timeout, pause)
+            state, error, seen = last_run(cursor, database)
+            record("the alert ran and its action succeeded", "TRIGGERED", state,
+                   detail=(error or f"history held: {seen or 'nothing'}")[:200])  # fmt: skip
             email = wait_for(
                 lambda: (open_incidents(cursor, database, SIGNAL) or [("", "", 0, None)])[0][3],
                 timeout, pause)  # fmt: skip

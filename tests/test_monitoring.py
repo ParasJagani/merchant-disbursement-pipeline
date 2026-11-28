@@ -237,8 +237,9 @@ def test_email_failures_are_recorded_not_raised():
 class AlertStandIn:
     """Answers the drill's Snowflake SQL with a LocalSilver, and plays the ALERT object."""
 
-    def __init__(self, silver, state="started", email="sent", fires=True):
+    def __init__(self, silver, state="started", email="sent", fires=True, history_delay=0):
         self.silver, self.state, self.email, self.fires = silver, state, email, fires
+        self.history_delay, self.history_reads = history_delay, 0
         self.rows, self.description, self.log = [], None, []
         self.last_state = "none"
         silver._clock = _now()  # injected rows count as loaded "now"
@@ -279,7 +280,9 @@ class AlertStandIn:
                 self._raise()
             self.last_state = "TRIGGERED" if self.fires and wanted else "CONDITION_FALSE"
         elif "ALERT_HISTORY" in text:
-            self.rows = [(self.last_state, "")]
+            self.history_reads += 1
+            late = self.history_reads <= self.history_delay
+            self.rows = [("SCHEDULED", "")] if late else [("SCHEDULED", ""), (self.last_state, "")]
         elif text.startswith("ALTER DYNAMIC TABLE"):
             return
         elif text.startswith("CALL "):
@@ -296,11 +299,11 @@ class AlertStandIn:
             self.rows = self.silver.query(translate(text))
 
 
-def drill(silver, **kwargs):
+def drill(silver, timeout=0, **kwargs):
     from ops import alert_drill
 
     conn = AlertStandIn(silver, **kwargs)
-    results = alert_drill.run(conn, "DB", timeout=0, pause=0)
+    results = alert_drill.run(conn, "DB", timeout=timeout, pause=0)
     return conn, {r["name"]: r for r in results}
 
 
@@ -310,6 +313,12 @@ def test_the_alert_drill_opens_an_incident_then_resolves_it(silver):
     assert results["an incident opened for the injected failure"]["actual"] == 1
     assert results["it counts every injected message"]["actual"] >= 500
     assert silver.query("SELECT status FROM OPS.alert_log") == [("RESOLVED",)]
+
+
+def test_a_run_that_reaches_the_history_a_little_late_still_passes(silver):
+    conn, results = drill(silver, timeout=5, history_delay=3)
+    assert results["the alert ran and its action succeeded"]["ok"]
+    assert conn.history_reads > 3
 
 
 def test_the_drill_fails_when_the_alert_does_not_open_an_incident(silver):
