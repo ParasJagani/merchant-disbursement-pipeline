@@ -112,3 +112,7 @@ Gate passed: chaos drill 572 of 572 quarantined with the right reason and a full
 - **No email address in git.** `ops/setup_alerts.py` stores it in `OPS.alert_settings` in Snowflake; a test fails if an address appears in the repository.
 - **The staleness alert is off by default** because the demo data is loaded once. It exists so the live feed can switch it on.
 
+## Phase 6 first run (trial account)
+
+Gate passed: an injected failure opened one incident and sent an email through the real alert, and clearing it resolved the incident. The only change needed was in the drill itself (poll the alert history; it is written a little after the run). The monitoring SQL needed no changes on the real account, again because the logic was tested on DuckDB first.
+
