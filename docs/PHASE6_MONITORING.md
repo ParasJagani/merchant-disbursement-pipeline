@@ -107,3 +107,10 @@ reconciliation to a table that a task keeps up to date.
 | `alerts-verify`: "alert runs that failed" | Read the error shown; also `SELECT * FROM TABLE(INFORMATION_SCHEMA.ALERT_HISTORY())` |
 | Drill: "before: no incidents are open" fails | A real incident is open. Look at `SELECT * FROM OPS.alert_log WHERE status = 'OPEN'` and fix its cause first |
 | Email status `failed: ...` in `OPS.alert_log` | The reason is in the text, usually an unverified address or a missing integration grant. The incident itself is still recorded |
+
+## Phase 6 first run (trial account)
+
+Gate passed. `make alerts-drill`: one `quarantine_recent` incident opened for the 572 injected messages (severity warning, count 572), nothing else fired, the alert run was `TRIGGERED`, the email was delivered, and after cleanup the incident resolved and every table count was restored. `make alerts-verify`: all nine checks passed (five rules defined, procedures present, alert started, no failed alert runs, email configured, no open incidents).
+
+One fix came from the real account: the first drill read `ALERT_HISTORY` once, straight after `EXECUTE ALERT`, and found nothing, because Snowflake records the run a little later. The incident, email and resolution had all worked. The drill now polls the history.
+
