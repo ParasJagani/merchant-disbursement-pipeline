@@ -125,4 +125,4 @@ Gate passed: an injected failure opened one incident and sent an email through t
 - **Integer money, never floats.** Amounts are formatted with integer arithmetic; a float is used only for chart axes. Currencies are never added together: statements, KPIs and charts are per currency.
 - **Account colours are stable.** Each account has a fixed colour slot for its merchant, so a filter does not repaint the rest. Hues come from the fixed categorical order, and a ninth is never invented.
 - **Streamlit, with cached queries.** Five-minute caching keeps Snowflake use small; a Refresh button clears it. Pages are tested headless with Streamlit's own test harness.
-
+- **The reader must not depend on the extractor's line breaks.** pypdf 7 returns a table row per line where 6.x returned a cell per line. `statements.verify` parses the stream of words and takes who and when from the PDF title, then checks separately that they are printed on the page.
