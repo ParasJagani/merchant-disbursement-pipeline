@@ -33,6 +33,14 @@ make statements-verify-snowflake   # the reporter role reads gold
 make demo-down
 ```
 
+### First run on Snowflake (trial account)
+
+Gate passed. `make roles-verify` printed 18 of 18 PASS; `make gold` built 21 of 21 as TRANSFORMER
+(it replaced the tables the admin had made); `make statements-verify-snowflake` passed as REPORTER
+with grand totals equal to gold. The first run of the gate failed on five refusal probes: sessions
+held the admin's privileges through secondary roles. Fixed by `USE SECONDARY ROLES NONE` per
+connection and `DEFAULT_SECONDARY_ROLES = ()` for the service user (see `DECISIONS.md`).
+
 If `make gold` fails with "insufficient privileges", paste the error: the likely fix is one more
 grant in `sql/70_grants.sql`, and `make roles-verify` will show which probe is missing it.
 
