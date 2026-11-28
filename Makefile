@@ -1,4 +1,4 @@
-.PHONY: lint test branding check up down golden live stage deploy verify demo-up demo-down silver-render silver-verify silver-reset dbt-oracle dbt-local gold gold-verify silver-refresh quality-verify chaos-plan chaos-drill alerts-setup alerts-verify alerts-plan alerts-drill
+.PHONY: lint test branding check up down golden live stage deploy verify demo-up demo-down silver-render silver-verify silver-reset dbt-oracle dbt-local gold gold-verify silver-refresh quality-verify chaos-plan chaos-drill alerts-setup alerts-verify alerts-plan alerts-drill statements statements-verify statements-verify-snowflake dashboard dashboard-snowflake
 lint:
 	ruff check .
 	ruff format --check .
@@ -56,3 +56,13 @@ alerts-plan:
 	python -m ops.alert_drill
 alerts-drill:
 	python -m ops.alert_drill --run
+statements:
+	python -m statements.build --all --out data/statements
+statements-verify:
+	python -m statements.verify
+statements-verify-snowflake:
+	python -m statements.verify --source snowflake
+dashboard:
+	streamlit run dashboard/app.py
+dashboard-snowflake:
+	DASHBOARD_SOURCE=snowflake streamlit run dashboard/app.py

@@ -116,3 +116,13 @@ Gate passed: chaos drill 572 of 572 quarantined with the right reason and a full
 
 Gate passed: an injected failure opened one incident and sent an email through the real alert, and clearing it resolved the incident. The only change needed was in the drill itself (poll the alert history; it is written a little after the run). The monitoring SQL needed no changes on the real account, again because the logic was tested on DuckDB first.
 
+## Phase 7 notes (dashboard and statements)
+
+- **One data layer, two sources.** `statements/sources.py` answers every question with the same SQL from a local DuckDB file or from Snowflake, so the dashboard and the statements never differ by source, and demos and tests cost no credits. Local is the default; Snowflake must be chosen.
+- **The PDF is verified by reading it back.** `statements.verify` extracts the PDF text and compares what a person would read with gold's monthly and daily tables and with the generator's answer key. Checking the numbers before layout would not prove what is printed.
+- **A statement is refused if gold's parts do not add up.** An inconsistent row is never printed.
+- **Closed merchants get statements.** Found by the gate: the first version listed only open merchants and the grand total was short. Money was still disbursed to merchants that were later closed.
+- **Integer money, never floats.** Amounts are formatted with integer arithmetic; a float is used only for chart axes. Currencies are never added together: statements, KPIs and charts are per currency.
+- **Account colours are stable.** Each account has a fixed colour slot for its merchant, so a filter does not repaint the rest. Hues come from the fixed categorical order, and a ninth is never invented.
+- **Streamlit, with cached queries.** Five-minute caching keeps Snowflake use small; a Refresh button clears it. Pages are tested headless with Streamlit's own test harness.
+
