@@ -46,6 +46,10 @@ On the golden dataset: 30 statements, every check passes, and the grand totals p
 339,370,111 minor units, the same figure gold and the oracle give. The check earned its keep during
 the build: the first version left out two closed merchants and the grand total came out short.
 
+## First run on Snowflake (trial account)
+
+Gate passed: `make gold` built 21 of 21 (3 models, 17 tests), then `make statements-verify-snowflake` built 30 statements and every check passed. Printed grand totals equal gold per currency: AUD 4,824,266; CAD 18,081,644; EUR 84,282,138; GBP 125,460,687; USD 106,721,376 (339,370,111 minor units in all). The dashboard started against Snowflake. The only fix after the build was in the checker, not the statements: pypdf 7 cuts text into different lines than 6.x, so the reader now works on the stream of words and takes merchant and month from the PDF title.
+
 ## The dashboard
 
 ```bash
