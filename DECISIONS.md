@@ -126,3 +126,13 @@ Gate passed: an injected failure opened one incident and sent an email through t
 - **Account colours are stable.** Each account has a fixed colour slot for its merchant, so a filter does not repaint the rest. Hues come from the fixed categorical order, and a ninth is never invented.
 - **Streamlit, with cached queries.** Five-minute caching keeps Snowflake use small; a Refresh button clears it. Pages are tested headless with Streamlit's own test harness.
 - **The reader must not depend on the extractor's line breaks.** pypdf 7 returns a table row per line where 6.x returned a cell per line. `statements.verify` parses the stream of words and takes who and when from the PDF title, then checks separately that they are printed on the page.
+
+## Phase 8 notes (CI, roles, packaging)
+
+- **One service user, three roles.** The trial has one admin user. Rather than create more users and keys, dbt and the reporting code switch to TRANSFORMER and REPORTER for their own work (`SNOWFLAKE_TRANSFORMER_ROLE`, `SNOWFLAKE_REPORTER_ROLE`), and both roles roll up to the admin role. Deploy and the drills stay on the admin because they create and drop objects. A real account would also give each role its own user.
+- **Grants are versioned SQL, applied last.** `sql/70_grants.sql` runs after everything else, so views recreated by earlier files get their grants back. Existing gold tables are moved to TRANSFORMER once (dbt can only replace tables it owns); future gold tables are granted to REPORTER automatically because dbt replaces them on every build.
+- **The reporter reads views, not the tables under them.** Views run with their owner's rights, so the reporter can read `health_signals` without access to `alert_settings`, which holds the notification address.
+- **The role gate checks refusals, and only trusts a privilege error.** `make roles-verify` runs probes that must work and probes that must be refused. A refusal passes only if Snowflake says it is a privilege problem. This was written without Snowflake access, so the grants are proven by the first real run, not by the tests (the tests check the logic and the grant file).
+- **Two workflows.** `ci` stays free and now runs the whole pipeline offline (golden data, DuckDB silver, dbt build, statement verification, dbt docs). `integration` is manual, asks for confirmation, and its script stops tasks, the alert and the dynamic tables on exit even if a step fails.
+- **Keys only from secrets**, written to a temporary folder and removed afterwards.
+

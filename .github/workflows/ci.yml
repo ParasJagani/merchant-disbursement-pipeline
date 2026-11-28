@@ -1,4 +1,5 @@
 name: ci
+# Free: no Snowflake account is touched. The Snowflake run is the separate "integration" workflow.
 on: [push, pull_request]
 jobs:
   checks:
@@ -18,3 +19,20 @@ jobs:
         env:
           BRANDING_DENYLIST: ${{ secrets.BRANDING_DENYLIST }}
         run: ./scripts/check_branding.sh
+      # The whole pipeline, offline: golden data -> silver on DuckDB -> gold with dbt -> PDFs read
+      # back and compared with gold and the answer key.
+      - name: Golden dataset
+        run: python -m generator backfill --out data/golden
+      - name: Silver and gold on DuckDB (dbt build)
+        run: make dbt-local
+      - name: Statements equal gold
+        run: make statements-verify
+      - name: dbt docs
+        run: DBT_DUCKDB_PATH=dbt/target/local.duckdb dbt docs generate --project-dir dbt --profiles-dir dbt --target duckdb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dbt-docs
+          path: |
+            dbt/target/index.html
+            dbt/target/manifest.json
+            dbt/target/catalog.json

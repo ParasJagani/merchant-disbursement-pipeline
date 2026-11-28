@@ -1,0 +1,44 @@
+name: integration
+# Runs the whole pipeline on a real Snowflake account. Manual only: it uses credits, so it never
+# runs on a push. The last step stops the tasks, the alert and the dynamic tables even if an
+# earlier step failed.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type 'run' to spend Snowflake credits"
+        required: true
+        default: "no"
+concurrency: snowflake-integration
+jobs:
+  snowflake:
+    if: ${{ github.event.inputs.confirm == 'run' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SNOWFLAKE_ORGANIZATION: ${{ secrets.SNOWFLAKE_ORGANIZATION }}
+      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_ADMIN_PRIVATE_KEY_PATH: ${{ github.workspace }}/.keys/admin.p8
+      SNOWFLAKE_LOADER_PRIVATE_KEY_PATH: ${{ github.workspace }}/.keys/loader.p8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Write the keys (private keys never leave the secrets store)
+        env:
+          ADMIN_KEY: ${{ secrets.SNOWFLAKE_ADMIN_PRIVATE_KEY }}
+          LOADER_KEY: ${{ secrets.SNOWFLAKE_LOADER_PRIVATE_KEY }}
+        run: |
+          umask 077
+          mkdir -p .keys
+          printf '%s\n' "$ADMIN_KEY" > .keys/admin.p8
+          printf '%s\n' "$LOADER_KEY" > .keys/loader.p8
+      - name: Offline checks first
+        run: make lint test
+      - name: Integration run
+        run: make integration
+      - name: Remove the keys
+        if: always()
+        run: rm -rf .keys

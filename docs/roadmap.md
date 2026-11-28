@@ -12,4 +12,4 @@ Nine phases, about 90 hours (an estimate). Each phase ends at a gate that is a d
 | P5 Quality and errors (done; gate passed on Snowflake) | 10 | Quarantine, test matrix, replay, chaos drill | Zero rows lost silently |
 | P6 Monitoring (done; gate passed on Snowflake) | 10 | Alerts, health signals, demo mode | An alert fires on an injected failure |
 | P7 Dashboard and PDF (done; gate passed on Snowflake) | 12 | Streamlit pages, one statement layout | PDF totals equal gold totals |
-| P8 CI, docs, packaging | 8 | Integration run, README, diagram, demo | CI green, README complete |
+| P8 CI, docs, packaging (built; roles check on Snowflake pending) | 8 | Integration run, README, diagram, demo | CI green, README complete |

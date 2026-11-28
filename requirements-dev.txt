@@ -5,3 +5,4 @@ dbt-core>=1.10
 dbt-duckdb>=1.10
 dbt-snowflake>=1.10
 pypdf>=5
+pyyaml
