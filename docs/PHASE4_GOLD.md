@@ -28,6 +28,7 @@ pip install -r requirements-dev.txt     # adds dbt-core and dbt-snowflake
 make dbt-oracle                         # refresh the answer-key seed from data/golden (only needed if you regenerate)
 make gold                               # dbt build: seed, three models, all tests
 make gold-verify                        # independent comparison with the oracle CSV
+make dbt-docs                           # lineage graph in the browser (local file, no Snowflake cost)
 ```
 
 Expected: `dbt build` ends with `Completed successfully` and no ERROR; `gold-verify` prints three PASS lines.
