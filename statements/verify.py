@@ -26,9 +26,10 @@ from .pdf import HEADINGS, build_pdf
 from .sources import AMOUNTS, Source, month_start, open_source
 
 _AMOUNT = re.compile(r"^-?\d{1,3}(,\d{3})*\.\d{2}$")
-_TITLE = re.compile(r"^(?P<merchant>\S+) · (?P<country>\S+) · (?P<month>[A-Za-z]+ \d{4}) ")
-_DETAIL = re.compile(r"^Account detail: .*\((?P<account>[^()]+)\) · (?P<currency>[A-Z]{3})$")
-_PAGE = re.compile(r"^Page \d+ of \d+$")
+_PAGE = re.compile(r"\bPage \d+ of \d+\s*$")
+_META = re.compile(r"^Statement (?P<merchant>\S+) (?P<month>\d{4}-\d{2})$")
+_CURRENCY = re.compile(r"^[A-Z]{3}$")
+_DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _COLUMNS = len(AMOUNTS)
 
 
@@ -44,76 +45,107 @@ def parse_amount(text: str) -> int:
     return sign * (int(whole) * 100 + int(cents))
 
 
-def _amounts(lines: list[str]) -> dict[str, int]:
-    return {name: parse_amount(text) for name, text in zip(AMOUNTS, lines, strict=True)}
+def _amounts(tokens: list[str]) -> dict[str, int]:
+    return {name: parse_amount(text) for name, text in zip(AMOUNTS, tokens, strict=True)}
 
 
-def pdf_lines(data: bytes) -> list[str]:
+def _page_texts(data: bytes) -> tuple[str, list[str]]:
     from pypdf import PdfReader
 
     reader = PdfReader(io.BytesIO(data))
+    title = (reader.metadata.title if reader.metadata else None) or ""
+    return title, [page.extract_text() or "" for page in reader.pages]
+
+
+def pdf_lines(data: bytes) -> list[str]:
+    """The text of the PDF, one entry per line, without the page footers.
+
+    Different versions of pypdf cut the same page into lines differently (one cell per line, or one
+    table row per line), so nothing here may depend on where the line breaks fall.
+    """
     lines: list[str] = []
-    for page in reader.pages:
-        lines += [ln.strip() for ln in page.extract_text().splitlines() if ln.strip()]
-    # Drop the page footer, which can fall in the middle of a table that runs onto a new page.
-    return [ln for ln in lines if " · generated " not in ln and not _PAGE.match(ln)]
+    for text in _page_texts(data)[1]:
+        lines += [ln.strip() for ln in text.splitlines() if ln.strip()]
+    # The footer can fall in the middle of a table that runs onto a new page: drop it.
+    return [ln for ln in lines if " · generated " not in ln and not _PAGE.search(ln)]
 
 
 def read_statement(data: bytes) -> dict:
-    """Parse a statement PDF into numbers: header, summaries and the per-account detail."""
-    lines = pdf_lines(data)
-    title = next((m for ln in lines if (m := _TITLE.match(ln))), None)
+    """Parse a statement PDF into numbers: header, summaries and the per-account detail.
+
+    Works on the stream of words, not on lines. Who and when come from the PDF's title, and the
+    visible text is checked separately by ``check_statement``.
+    """
+    raw_title = _page_texts(data)[0]
+    title = _META.match(raw_title)
     if title is None:
-        raise ReadError("no merchant line found")
+        raise ReadError(
+            f"the PDF has no 'Statement <merchant> <YYYY-MM>' title (it says {raw_title!r})"
+        )
+    tokens = " ".join(pdf_lines(data)).split()
     out = {
         "merchant_id": title["merchant"],
-        "month": datetime.strptime(title["month"], "%B %Y").date(),
+        "month": datetime.strptime(title["month"], "%Y-%m").date(),
         "by_currency": {},
         "by_account": {},
         "detail": {},
     }
-    headings = [HEADINGS[a] for a in AMOUNTS]
+    words = [w for a in AMOUNTS for w in HEADINGS[a].split()]
 
-    def section(start: str, first: list[str]):
-        i = lines.index(start) + 1
-        header = [*first, *headings]
-        if lines[i : i + len(header)] != header:
-            raise ReadError(f"unexpected columns under {start!r}")
-        return i + len(header)
+    def find(*phrase: str, start: int = 0) -> int:
+        for i in range(start, len(tokens) - len(phrase) + 1):
+            if tokens[i : i + len(phrase)] == list(phrase):
+                return i
+        raise ReadError(f"{' '.join(phrase)!r} not found; the text begins {tokens[:12]}")
 
-    i = section("Summary by currency", ["Currency", "Accounts"])
-    while re.fullmatch(r"[A-Z]{3}", lines[i]):
-        out["by_currency"][lines[i]] = {
-            "accounts": int(lines[i + 1]),
-            "amounts": _amounts(lines[i + 2 : i + 2 + _COLUMNS]),
+    def expect(i: int, expected: list[str], where: str) -> int:
+        if tokens[i : i + len(expected)] != expected:
+            raise ReadError(f"unexpected columns under {where}: {tokens[i : i + len(expected)]}")
+        return i + len(expected)
+
+    def amount(i: int) -> bool:
+        return i < len(tokens) and bool(_AMOUNT.match(tokens[i]))
+
+    i = expect(find("Summary", "by", "currency") + 3, ["Currency", "Accounts", *words], "currency")
+    while _CURRENCY.match(tokens[i]) and tokens[i + 1].isdigit():
+        out["by_currency"][tokens[i]] = {
+            "accounts": int(tokens[i + 1]),
+            "amounts": _amounts(tokens[i + 2 : i + 2 + _COLUMNS]),
         }
         i += 2 + _COLUMNS
-    i = section("Summary by account", ["Account", "Currency"])
-    while re.fullmatch(r"[A-Z]{3}", lines[i + 1]):
-        out["by_account"][lines[i]] = {
-            "currency": lines[i + 1],
-            "amounts": _amounts(lines[i + 2 : i + 2 + _COLUMNS]),
+    i = expect(find("Summary", "by", "account") + 3, ["Account", "Currency", *words], "account")
+    while _CURRENCY.match(tokens[i + 1]) and amount(i + 2):
+        out["by_account"][tokens[i]] = {
+            "currency": tokens[i + 1],
+            "amounts": _amounts(tokens[i + 2 : i + 2 + _COLUMNS]),
         }
         i += 2 + _COLUMNS
-    for position, line in enumerate(lines):
-        match = _DETAIL.match(line)
-        if not match:
-            continue
-        j = position + 1 + 1 + _COLUMNS  # skip the heading and "Date" + the column names
+    start = 0
+    while True:
+        try:
+            i = find("Account", "detail:", start=start)
+        except ReadError:
+            break
+        j = i + 2
+        while not (tokens[j] == "·" and _CURRENCY.match(tokens[j + 1])):
+            j += 1  # the label can be several words; the account id is the last one before "·"
+        account, currency = tokens[j - 1].strip("()"), tokens[j + 1]
+        j = expect(j + 2, ["Date", *words], account)
         days = []
-        while re.fullmatch(r"\d{4}-\d{2}-\d{2}|Date", lines[j]):
-            if lines[j] == "Date":  # the header repeats when a table runs onto a new page
-                j += 1 + _COLUMNS
+        while _DAY.match(tokens[j]) or tokens[j] == "Date":
+            if tokens[j] == "Date":  # the header repeats when a table runs onto a new page
+                j = expect(j, ["Date", *words], account)
                 continue
-            days.append((date.fromisoformat(lines[j]), _amounts(lines[j + 1 : j + 1 + _COLUMNS])))
+            days.append((date.fromisoformat(tokens[j]), _amounts(tokens[j + 1 : j + 1 + _COLUMNS])))
             j += 1 + _COLUMNS
-        if lines[j] != "Total":
-            raise ReadError(f"no total row under {match['account']}")
-        out["detail"][match["account"]] = {
-            "currency": match["currency"],
+        if tokens[j] != "Total":
+            raise ReadError(f"no total row under {account}")
+        out["detail"][account] = {
+            "currency": currency,
             "days": days,
-            "total": _amounts(lines[j + 1 : j + 1 + _COLUMNS]),
+            "total": _amounts(tokens[j + 1 : j + 1 + _COLUMNS]),
         }
+        start = j + 1 + _COLUMNS
     return out
 
 
@@ -127,6 +159,9 @@ def check_statement(
     """Problems found in one PDF, grouped by what was compared. Empty lists mean it agrees."""
     parsed = read_statement(data)
     problems: dict[str, list[str]] = defaultdict(list)
+    shown = " ".join(pdf_lines(data))
+    if merchant_id not in shown or f"{month:%B %Y}" not in shown:
+        problems["merchant and month are printed"].append(f"{merchant_id} {month:%B %Y}")
     if (parsed["merchant_id"], parsed["month"]) != (merchant_id, month):
         problems["right merchant and month"].append(f"{parsed['merchant_id']} {parsed['month']}")
     monthly = {r["account_id"]: r for r in source.monthly(merchant_id, month)}
@@ -221,6 +256,7 @@ def verify_all(source: Source, oracle_rows: list[dict] | None = None, out_dir: P
 
 CHECKS = [
     "right merchant and month",
+    "merchant and month are printed",
     "same accounts as gold",
     "same currency as gold",
     "account totals equal gold monthly",
