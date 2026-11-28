@@ -18,6 +18,7 @@ Each phase ended at a gate that is an automated check, run on a real Snowflake a
 | No bad message is lost silently | `make chaos-drill` | 572 of 572 injected messages quarantined with the expected reason, then fully cleaned up |
 | A failure raises an alert | `make alerts-drill` | one incident opened through the real alert, email sent, incident resolved |
 | Printed statements equal gold | `make statements-verify-snowflake` | 30 statements, every check passes, grand totals equal gold in all five currencies |
+| The whole pipeline, start to finish | `make integration` | every step above passes in one run, then the meter is stopped |
 | Each role does its job and nothing more | `make roles-verify` | 18 of 18 probes: dbt builds gold as TRANSFORMER, REPORTER reads gold and is refused everything else |
 
 ## What it looks like

@@ -41,6 +41,15 @@ with grand totals equal to gold. The first run of the gate failed on five refusa
 held the admin's privileges through secondary roles. Fixed by `USE SECONDARY ROLES NONE` per
 connection and `DEFAULT_SECONDARY_ROLES = ()` for the service user (see `DECISIONS.md`).
 
+### Full integration run
+
+`make integration` has also run end to end on the trial account and finished with "integration
+passed": deploy (90 statements), bronze counts equal the golden dataset (re-staging added no new
+files, so the replay check held), silver 33 of 33 with every dynamic table incremental, quality with
+the one known warning (extra copies in the fees dead-letter file, no message missing), gold 21 of 21
+as TRANSFORMER, roles 18 of 18, and statements 30 of 30 with totals equal to gold. The script then
+suspended the tasks, the alert and the dynamic tables.
+
 If `make gold` fails with "insufficient privileges", paste the error: the likely fix is one more
 grant in `sql/70_grants.sql`, and `make roles-verify` will show which probe is missing it.
 
