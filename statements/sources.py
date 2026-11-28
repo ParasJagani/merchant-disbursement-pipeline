@@ -224,7 +224,9 @@ def open_source(
 
         warehouse = os.environ.get("SNOWFLAKE_TRANSFORM_WAREHOUSE", "TRANSFORM_WH")
         return SnowflakeSource(
-            connect(warehouse=warehouse),
+            connect(
+                role_env="SNOWFLAKE_REPORTER_ROLE", default_role="REPORTER", warehouse=warehouse
+            ),
             database or os.environ.get("SNOWFLAKE_DATABASE", "MERCHANT_DISBURSEMENT"),
         )
     raise ValueError(f"unknown source {kind!r}: use 'duckdb' or 'snowflake'")

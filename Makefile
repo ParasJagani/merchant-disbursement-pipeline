@@ -1,4 +1,4 @@
-.PHONY: dbt-docs lint test branding check up down golden live stage deploy verify demo-up demo-down silver-render silver-verify silver-reset dbt-oracle dbt-local gold gold-verify silver-refresh quality-verify chaos-plan chaos-drill alerts-setup alerts-verify alerts-plan alerts-drill statements statements-verify statements-verify-snowflake dashboard dashboard-snowflake
+.PHONY: load integration roles-verify dbt-docs lint test branding check up down golden live stage deploy verify demo-up demo-down silver-render silver-verify silver-reset dbt-oracle dbt-local gold gold-verify silver-refresh quality-verify chaos-plan chaos-drill alerts-setup alerts-verify alerts-plan alerts-drill statements statements-verify statements-verify-snowflake dashboard dashboard-snowflake
 lint:
 	ruff check .
 	ruff format --check .
@@ -19,8 +19,12 @@ stage:
 	python -m file_writer backfill --stager snowflake
 deploy:
 	python -m ops.deploy
+load:
+	python -m ops.load_bronze
 verify:
 	python -m ops.verify_bronze
+integration:
+	./scripts/integration.sh
 demo-up:
 	python -m ops.task_control up
 demo-down:
@@ -41,6 +45,8 @@ dbt-docs:
 	DBT_DUCKDB_PATH=dbt/target/local.duckdb dbt docs serve --project-dir dbt --profiles-dir dbt --target duckdb
 gold:
 	dbt build --project-dir dbt --profiles-dir dbt --target snowflake
+roles-verify:
+	python -m ops.verify_roles
 gold-verify:
 	python -m ops.verify_gold
 silver-refresh:

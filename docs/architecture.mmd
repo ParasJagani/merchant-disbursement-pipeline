@@ -1,0 +1,33 @@
+flowchart TB
+    GEN["<b>generator</b><br/>deterministic events + oracle answer key"]
+    KFK[("<b>Kafka</b><br/>7 topics")]
+    FW["<b>file_writer</b><br/>NDJSON, gzip, one folder per topic"]
+    GEN -->|produce| KFK -->|consume| FW
+
+    FW -->|"PUT (LOADER role)"| STG
+
+    subgraph SNOW["Snowflake"]
+        direction TB
+        STG[("LANDING stage")]
+        BRZ[("<b>BRONZE</b><br/>raw VARIANT, append-only")]
+        REF["<b>SILVER reference</b><br/>streams + MERGE tasks<br/>versioned history"]
+        EVT["<b>SILVER events</b><br/>dynamic tables<br/>typed and deduplicated"]
+        QUA[("<b>QUARANTINE</b><br/>rejected rows with a reason")]
+        LED["<b>GOLD</b> (dbt, TRANSFORMER role)<br/>gold_ledger → gold_daily → gold_monthly"]
+        ALR["<b>OPS</b><br/>HEALTH_ALERT every 10 min → alert_log"]
+        STG -->|"COPY INTO (load task)"| BRZ
+        BRZ --> REF
+        BRZ --> EVT
+        EVT -.->|invalid| QUA
+        REF --> LED
+        EVT --> LED
+        QUA -.->|signals| ALR
+        LED -.->|reconciliation| ALR
+    end
+
+    ORA["oracle CSV (dbt seed)"] -.->|"test: gold_matches_oracle"| LED
+    ALR -->|SYSTEM$SEND_EMAIL| MAIL["email"]
+    LED -->|"REPORTER role"| PDF["<b>PDF statements</b><br/>summary + per-account pages"]
+    LED -->|"REPORTER role"| DASH["<b>Streamlit dashboard</b><br/>disbursements + pipeline health"]
+    ALR --> DASH
+    PDF -.->|"verified: read back, totals equal gold"| LED
