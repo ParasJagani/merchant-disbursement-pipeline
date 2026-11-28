@@ -1,4 +1,4 @@
-.PHONY: lint test branding check up down golden live stage deploy verify demo-up demo-down silver-render silver-verify silver-reset dbt-oracle dbt-local gold gold-verify silver-refresh quality-verify chaos-plan chaos-drill
+.PHONY: lint test branding check up down golden live stage deploy verify demo-up demo-down silver-render silver-verify silver-reset dbt-oracle dbt-local gold gold-verify silver-refresh quality-verify chaos-plan chaos-drill alerts-setup alerts-verify alerts-plan alerts-drill
 lint:
 	ruff check .
 	ruff format --check .
@@ -48,3 +48,11 @@ chaos-plan:
 	python -m ops.chaos_drill
 chaos-drill:
 	python -m ops.chaos_drill --run
+alerts-setup:
+	python -m ops.setup_alerts --email "$(EMAIL)"
+alerts-verify:
+	python -m ops.verify_monitoring
+alerts-plan:
+	python -m ops.alert_drill
+alerts-drill:
+	python -m ops.alert_drill --run

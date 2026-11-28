@@ -102,3 +102,13 @@ real account to find.
 
 Gate passed: chaos drill 572 of 572 quarantined with the right reason and a full cleanup; `make quality-verify` has no FAIL; silver and gold checks still pass after the rebuild. Two real-account findings: Snowflake's timestamp parsing is more lenient than DuckDB's (fixed with an explicit shape check), and a half-finished stage run can leave extra dead-letter lines (now a warning).
 
+## Phase 6 notes (monitoring)
+
+- **Incidents, not messages.** `OPS.alert_log` holds one row per incident, opened once and resolved when the signal clears, so a problem that lasts an hour sends one email, not six.
+- **The log is the record, the email is a convenience.** The log is committed first and the email is sent afterwards; a failed email is written to `email_status` and never fails the run.
+- **Rules are data.** Thresholds, windows and on/off switches live in `OPS.alert_rules`; a deploy only adds missing rules, so a tuned threshold survives.
+- **A native, serverless ALERT** (every 10 minutes) with a deliberately wide condition (anything firing, anything still open, any recent failure); `RAISE_ALERTS()` decides what is new. It is created suspended and follows the demo-up and demo-down switch, like the tasks.
+- **Platform failures are measured in the procedure**, not in a view, because the `INFORMATION_SCHEMA` history functions are table functions the alert condition and procedures can read. The DuckDB harness skips those statements and tests write `OPS.platform_signals` instead; the real functions are proved on Snowflake by the drill and `make alerts-verify`.
+- **No email address in git.** `ops/setup_alerts.py` stores it in `OPS.alert_settings` in Snowflake; a test fails if an address appears in the repository.
+- **The staleness alert is off by default** because the demo data is loaded once. It exists so the live feed can switch it on.
+

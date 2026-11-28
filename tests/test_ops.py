@@ -77,6 +77,8 @@ def test_every_statement_is_safe_to_repeat():
                 head.startswith(("USE ", "GRANT ", "ALTER STAGE "))  # ALTER ... SET is repeatable
                 or " IF NOT EXISTS " in head[:80]
                 or head.startswith("CREATE OR REPLACE ")
+                # a seed that adds only the rows that are missing
+                or (head.startswith("INSERT INTO ") and "WHERE S.SIGNAL NOT IN (SELECT" in head)
             ), s[:60]
 
 
@@ -123,6 +125,7 @@ def test_task_control_resumes_and_suspends_tasks_and_dynamic_tables():
     assert up[0] == "ALTER TASK DB.OPS.LOAD_BRONZE_TASK RESUME"
     assert "ALTER TASK DB.OPS.MERGE_MERCHANTS_TASK RESUME" in up
     assert "ALTER DYNAMIC TABLE DB.SILVER.silver_transactions RESUME" in up
+    assert "ALTER ALERT DB.OPS.HEALTH_ALERT RESUME" in up
     down = set_state(conn, "DB", False)
     assert [s.replace("SUSPEND", "RESUME") for s in down] == up
     assert conn.c.executed == up + down
